@@ -276,7 +276,7 @@ bool InitializeFeatures() {
 		return false;
 
 	UNICODE_STRING routineName = RTL_CONSTANT_STRING(L"ExAllocatePool2");
-	AllocatePool2 = MmGetSystemRoutineAddress(&routineName);
+	AllocatePool2 = reinterpret_cast<decltype(ExAllocatePool2)*>(MmGetSystemRoutineAddress(&routineName));
 
 	// Initialize utils.
 	__try {

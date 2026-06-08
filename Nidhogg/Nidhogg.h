@@ -24,7 +24,7 @@ constexpr wchar_t REG_CALLBACK_ALTITUDE[] = L"31122.6172";
 
 extern "C" {
     ULONG WindowsBuildNumber = 0;
-    PVOID AllocatePool2 = NULL;
+    decltype(ExAllocatePool2)* AllocatePool2 = nullptr;
 }
 
 // Prototypes.

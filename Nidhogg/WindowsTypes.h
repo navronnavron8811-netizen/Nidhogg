@@ -1289,12 +1289,6 @@ typedef NTSTATUS(NTAPI* tNtCreateThreadEx)(
 	SIZE_T SizeOfStackReserve,
 	PVOID lpBytesBuffer);
 
-typedef PVOID(NTAPI* tExAllocatePool2)(
-	POOL_FLAGS Flags,
-	SIZE_T     NumberOfBytes,
-	ULONG      Tag
-	);
-
 typedef _Function_class_(USER_THREAD_START_ROUTINE)
 NTSTATUS NTAPI USER_THREAD_START_ROUTINE(
 	_In_ PVOID ThreadParameter

@@ -12,7 +12,7 @@ inline PVOID RegistrationHandle = NULL;
 
 extern "C" {
     extern ULONG WindowsBuildNumber;
-    extern PVOID AllocatePool2;
+    extern decltype(ExAllocatePool2)* AllocatePool2;
 }
 
 struct EnabledFeatures {
