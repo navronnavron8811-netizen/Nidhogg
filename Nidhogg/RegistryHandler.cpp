@@ -445,7 +445,7 @@ NTSTATUS RegistryHandler::RegNtPostEnumerateKeyHandler(_Inout_ REG_POST_OPERATIO
 					RtlCopyMemory(preInfo->KeyInformation, tempKeyInfo.Get(), resultLength);
 				}
 				__except (EXCEPTION_EXECUTE_HANDLER) {
-					Print(DRIVER_PREFIX "Failed to copy the next key item, 0x%x\n", GetExceptionCode());
+					NidhoggLogger.Error(DRIVER_PREFIX "Failed to copy the next key item, 0x%x\n", GetExceptionCode());
 				}
 			}
 			counter++;
@@ -564,7 +564,7 @@ NTSTATUS RegistryHandler::RegNtPostEnumerateValueKeyHandler(_Inout_ REG_POST_OPE
 					RtlCopyMemory(preInfo->KeyValueInformation, tempValueInfo.Get(), resultLength);
 				}
 				__except (EXCEPTION_EXECUTE_HANDLER) {
-					Print(DRIVER_PREFIX "Failed to copy the next value item, 0x%x\n", GetExceptionCode());
+					NidhoggLogger.Error(DRIVER_PREFIX "Failed to copy the next value item, 0x%x\n", GetExceptionCode());
 				}
 			}
 			counter++;

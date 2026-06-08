@@ -22,7 +22,7 @@ NetworkHandler::~NetworkHandler() {
 		NTSTATUS status = InstallNsiHook(true);
 
 		if (!NT_SUCCESS(status))
-			Print(DRIVER_PREFIX "Failed to remove NSI hook: (0x%08X).\n", status);
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to remove NSI hook: (0x%08X).\n", status);
 		callbackActivated = false;
 	}
 	ClearHiddenPortsList(PortType::All);
@@ -192,7 +192,7 @@ bool NetworkHandler::RemoveHiddenPort(_In_ HiddenPort& port) {
 			NTSTATUS status = InstallNsiHook(true);
 
 			if (!NT_SUCCESS(status))
-				Print(DRIVER_PREFIX "Failed to remove NSI hook: (0x%08X).\n", status);
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to remove NSI hook: (0x%08X).\n", status);
 			else
 				callbackActivated = false;
 		}
@@ -219,7 +219,7 @@ void NetworkHandler::ClearHiddenPortsList(_In_ PortType portType) {
 			NTSTATUS status = InstallNsiHook(true);
 
 			if (!NT_SUCCESS(status))
-				Print(DRIVER_PREFIX "Failed to remove NSI hook: (0x%08X).\n", status);
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to remove NSI hook: (0x%08X).\n", status);
 			else
 				callbackActivated = false;
 		}
@@ -230,7 +230,7 @@ void NetworkHandler::ClearHiddenPortsList(_In_ PortType portType) {
 			NTSTATUS status = InstallNsiHook(true);
 
 			if (!NT_SUCCESS(status))
-				Print(DRIVER_PREFIX "Failed to remove NSI hook: (0x%08X).\n", status);
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to remove NSI hook: (0x%08X).\n", status);
 			else
 				callbackActivated = false;
 		}
@@ -243,7 +243,7 @@ void NetworkHandler::ClearHiddenPortsList(_In_ PortType portType) {
 			NTSTATUS status = InstallNsiHook(true);
 
 			if (!NT_SUCCESS(status))
-				Print(DRIVER_PREFIX "Failed to remove NSI hook: (0x%08X).\n", status);
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to remove NSI hook: (0x%08X).\n", status);
 			callbackActivated = false;
 		}
 		break;
