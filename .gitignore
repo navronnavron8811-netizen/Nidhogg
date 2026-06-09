@@ -6,7 +6,8 @@
 idatocppsig.py
 images/logo_original.png
 \.*/
-!.github
+.github/
+!.github/ISSUE_TEMPLATE/
 *.md
 !README.md
 !CONTRIBUTING.md
