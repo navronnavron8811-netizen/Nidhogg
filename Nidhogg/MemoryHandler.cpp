@@ -702,22 +702,18 @@ NTSTATUS MemoryHandler::RestorePebModule(_In_ PEPROCESS& process, _In_ HiddenMod
 	NTSTATUS status = STATUS_UNSUCCESSFUL;
 	time.QuadPart = ONE_SECOND;
 
-	constexpr auto RestoreEntry = [](PLDR_DATA_TABLE_ENTRY pebEntry, HiddenModuleEntry* entry) -> bool {
-		if ((!IsValidListEntry(&pebEntry->InLoadOrderLinks) && IsValidListEntry(&entry->Links.InLoadOrderLinks)) || 
-			(!IsValidListEntry(&pebEntry->InInitializationOrderLinks) && IsValidListEntry(&entry->Links.InInitializationOrderLinks)) ||
-			(!IsValidListEntry(&pebEntry->InMemoryOrderLinks) && IsValidListEntry(&entry->Links.InMemoryOrderLinks)) ||
-			(!IsValidListEntry(&pebEntry->HashLinks) && IsValidListEntry(&entry->Links.HashLinks))) {
-			return false;
-		}
+	constexpr auto RestoreSavedLinks = [](PLIST_ENTRY entry, const LIST_ENTRY& savedLinks) -> bool {
 		__try {
-			if (IsValidListEntry(&entry->Links.InLoadOrderLinks))
-				InsertHeadList(&pebEntry->InLoadOrderLinks, &entry->Links.InLoadOrderLinks);
-			if (IsValidListEntry(&entry->Links.InInitializationOrderLinks))
-				InsertHeadList(&pebEntry->InInitializationOrderLinks, &entry->Links.InInitializationOrderLinks);
-			if (IsValidListEntry(&entry->Links.InMemoryOrderLinks))
-				InsertHeadList(&pebEntry->InMemoryOrderLinks, &entry->Links.InMemoryOrderLinks);
-			if (IsValidListEntry(&entry->Links.HashLinks))
-				InsertHeadList(&pebEntry->HashLinks, &entry->Links.HashLinks);
+			if (!entry || !savedLinks.Blink || !savedLinks.Flink ||
+				savedLinks.Blink->Flink != savedLinks.Flink ||
+				savedLinks.Flink->Blink != savedLinks.Blink) {
+				return false;
+			}
+
+			entry->Blink = savedLinks.Blink;
+			entry->Flink = savedLinks.Flink;
+			savedLinks.Blink->Flink = entry;
+			savedLinks.Flink->Blink = entry;
 		}
 		__except (EXCEPTION_EXECUTE_HANDLER) {
 			return false;
@@ -751,44 +747,27 @@ NTSTATUS MemoryHandler::RestorePebModule(_In_ PEPROCESS& process, _In_ HiddenMod
 			break;
 		}
 
-		// First validate that moduleEntry->OriginalEntry is valid before accessing its members
-		if (!moduleEntry->OriginalEntry || !IsValidListEntry(moduleEntry->OriginalEntry)) {
+		if (!moduleEntry->OriginalEntry) {
 			status = STATUS_INVALID_PARAMETER;
 			break;
 		}
 
-		if (moduleEntry->OriginalEntry->Blink && IsValidListEntry(moduleEntry->OriginalEntry->Blink)) {
-			pebEntry = CONTAINING_RECORD(moduleEntry->OriginalEntry->Blink, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+		pebEntry = CONTAINING_RECORD(moduleEntry->OriginalEntry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
 
-			if (RestoreEntry(pebEntry, moduleEntry)) {
-				status = STATUS_SUCCESS;
-				break;
-			}
-		}
-			
-		if (moduleEntry->OriginalEntry->Flink && IsValidListEntry(moduleEntry->OriginalEntry->Flink)) {
-			pebEntry = CONTAINING_RECORD(moduleEntry->OriginalEntry->Flink, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+		if (!RestoreSavedLinks(&pebEntry->InLoadOrderLinks, moduleEntry->Links.InLoadOrderLinks))
+			InsertTailList(&targetPeb->LoaderData->InLoadOrderModuleList, &pebEntry->InLoadOrderLinks);
 
-			if (RestoreEntry(pebEntry, moduleEntry)) {
-				status = STATUS_SUCCESS;
-				break;
-			}
+		if (!RestoreSavedLinks(&pebEntry->InMemoryOrderLinks, moduleEntry->Links.InMemoryOrderLinks))
+			InsertTailList(&targetPeb->LoaderData->InMemoryOrderModuleList, &pebEntry->InMemoryOrderLinks);
+
+		if (!RestoreSavedLinks(&pebEntry->InInitializationOrderLinks, moduleEntry->Links.InInitializationOrderLinks))
+			InsertTailList(&targetPeb->LoaderData->InInitializationOrderModuleList, &pebEntry->InInitializationOrderLinks);
+
+		if (!RestoreSavedLinks(&pebEntry->HashLinks, moduleEntry->Links.HashLinks)) {
+			InitializeListHead(&pebEntry->HashLinks);
 		}
 
-		// Fallback: iterate through the entire list
-		for (PLIST_ENTRY pListEntry = targetPeb->LoaderData->InLoadOrderModuleList.Flink;
-			pListEntry != &targetPeb->LoaderData->InLoadOrderModuleList;
-			pListEntry = pListEntry->Flink) {
-
-			pebEntry = CONTAINING_RECORD(pListEntry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
-
-			if (pebEntry && IsValidListEntry(&pebEntry->InLoadOrderLinks)) {
-				if (RestoreEntry(pebEntry, moduleEntry)) {
-					status = STATUS_SUCCESS;
-					break;
-				}
-			}
-		}
+		status = STATUS_SUCCESS;
 	} while (false);
 	
 	KeUnstackDetachProcess(&state);

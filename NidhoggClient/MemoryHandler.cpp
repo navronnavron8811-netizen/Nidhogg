@@ -362,8 +362,8 @@ CredentialsInformation MemoryHandler::DumpCredentials() {
 		credSize.IvSize == 0) {
 		throw MemoryHandlerException("No credentials found or an error occurred while getting credentials size.");
 	}
-	credentials.DesKey.Size = credSize.DesKeySize;
-	credentials.Iv.Size = credSize.IvSize;
+	credentials.DesKey.Size = static_cast<ULONG>(credSize.DesKeySize);
+	credentials.Iv.Size = static_cast<ULONG>(credSize.IvSize);
 	credentials.Count = credSize.CredentialsCount;
 
 	// Allocating info.

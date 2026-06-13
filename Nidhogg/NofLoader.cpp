@@ -218,7 +218,6 @@ NTSTATUS NofLoader::ProcessSections() {
 	UINT32 symbol = 0;
 	PCHAR symbolName = NULL;
 	PCHAR pFunction = NULL;
-	SIZE_T bytesWritten = 0;
 	UINT16 functionIndex = 0;
 	UINT64 offsetLong = 0;
 	UINT32 offset = 0;
