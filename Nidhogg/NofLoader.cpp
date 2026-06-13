@@ -287,7 +287,9 @@ NTSTATUS NofLoader::ProcessSections() {
 					}
 				}
 				else if (coff.Reloc->Type == IMAGE_REL_AMD64_REL32) {
-					relativeOffset = (coff.FunMap + (functionIndex * 8)) - (coff.SecMap[sectionIndex].Ptr + coff.Reloc->VirtualAddress + 4);
+					relativeOffset = static_cast<UINT32>((coff.FunMap + (functionIndex * 8)) - 
+						(coff.SecMap[sectionIndex].Ptr + 
+						coff.Reloc->VirtualAddress + 4));
 
 					if (relativeOffset > MAX_OFFSET) {
 						status = STATUS_ABANDONED;
