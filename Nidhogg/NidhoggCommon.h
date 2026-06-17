@@ -1,24 +1,18 @@
 #pragma once
 #include "pch.h"
+#include "Logger.h"
 
 // #define DRIVER_REFLECTIVELY_LOADED // Comment or uncomment it when you load the driver reflectively.
-#define PRINTS // Comment or uncomment for printing
 constexpr ULONG DRIVER_TAG = 'hdiN';
 #define DRIVER_PREFIX "Nidhogg: "
-
-#ifdef PRINTS
-typedef ULONG(NTAPI* tDbgPrint)(PCSTR Format, ...);
-constexpr tDbgPrint Print = DbgPrint;
-#else
-constexpr VOID Print(...) {};
-#endif
+inline constexpr Logger NidhoggLogger;
 
 // Globals.
 inline PVOID RegistrationHandle = NULL;
 
 extern "C" {
     extern ULONG WindowsBuildNumber;
-    extern PVOID AllocatePool2;
+    extern decltype(ExAllocatePool2)* AllocatePool2;
 }
 
 struct EnabledFeatures {

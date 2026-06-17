@@ -218,7 +218,6 @@ NTSTATUS NofLoader::ProcessSections() {
 	UINT32 symbol = 0;
 	PCHAR symbolName = NULL;
 	PCHAR pFunction = NULL;
-	SIZE_T bytesWritten = 0;
 	UINT16 functionIndex = 0;
 	UINT64 offsetLong = 0;
 	UINT32 offset = 0;
@@ -288,7 +287,9 @@ NTSTATUS NofLoader::ProcessSections() {
 					}
 				}
 				else if (coff.Reloc->Type == IMAGE_REL_AMD64_REL32) {
-					relativeOffset = (coff.FunMap + (functionIndex * 8)) - (coff.SecMap[sectionIndex].Ptr + coff.Reloc->VirtualAddress + 4);
+					relativeOffset = static_cast<UINT32>((coff.FunMap + (functionIndex * 8)) - 
+						(coff.SecMap[sectionIndex].Ptr + 
+						coff.Reloc->VirtualAddress + 4));
 
 					if (relativeOffset > MAX_OFFSET) {
 						status = STATUS_ABANDONED;

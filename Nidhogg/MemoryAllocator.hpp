@@ -53,7 +53,7 @@ inline Pointer AllocateMemory(size_t size,
 	if (AllocatePool2 && WindowsBuildNumber >= WIN_2004 && !forceDeprecatedAlloc) {
 		POOL_FLAGS flags = paged ? POOL_FLAG_PAGED : POOL_FLAG_NON_PAGED;
 		flags = execute ? POOL_FLAG_NON_PAGED_EXECUTE : flags;
-		allocatedMem = ((tExAllocatePool2)AllocatePool2)(flags, size, DRIVER_TAG);
+		allocatedMem = AllocatePool2(flags, size, DRIVER_TAG);
 	}
 	else {
 		POOL_TYPE flags = paged ? PagedPool : NonPagedPool;
