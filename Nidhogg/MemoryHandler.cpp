@@ -1646,28 +1646,24 @@ PETHREAD MemoryHandler::FindAlertableThread(_In_ HANDLE pid) {
 	ULONG guiThread = 0;
 	PETHREAD targetThread = NULL;
 	PSYSTEM_PROCESS_INFO info = NULL;
-	PSYSTEM_PROCESS_INFO originalInfo = NULL;
 	ULONG infoSize = 0;
+	auto infoAllocator = MemoryAllocator<PSYSTEM_PROCESS_INFO>();
 
 	NTSTATUS status = ZwQuerySystemInformation(SystemProcessInformation, NULL, 0, &infoSize);
 
 	while (status == STATUS_INFO_LENGTH_MISMATCH) {
-		FreeVirtualMemory(info);
-		info = AllocateMemory<PSYSTEM_PROCESS_INFO>(infoSize);
-
-		if (!info) {
+		if (!infoAllocator.Realloc(infoSize)) {
 			status = STATUS_INSUFFICIENT_RESOURCES;
 			break;
 		}
 
-		status = ZwQuerySystemInformation(SystemProcessInformation, info, infoSize, &infoSize);
+		status = ZwQuerySystemInformation(SystemProcessInformation, infoAllocator.Get(), infoSize, &infoSize);
 	}
 
-	if (!NT_SUCCESS(status) || !info) {
-		FreeVirtualMemory(info);
+	if (!NT_SUCCESS(status) || !infoAllocator.IsValid()) {
 		ExRaiseStatus(status);
 	}
-	originalInfo = info;
+	info = infoAllocator.Get();
 	status = STATUS_NOT_FOUND;
 
 	// Iterating the processes information until our pid is found.
@@ -1680,7 +1676,6 @@ PETHREAD MemoryHandler::FindAlertableThread(_In_ HANDLE pid) {
 	}
 
 	if (!NT_SUCCESS(status)) {
-		FreeVirtualMemory(originalInfo);
 		ExRaiseStatus(status);
 	}
 
@@ -1714,7 +1709,6 @@ PETHREAD MemoryHandler::FindAlertableThread(_In_ HANDLE pid) {
 		}
 		break;
 	}
-	FreeVirtualMemory(originalInfo);
 
 	if (!targetThread)
 		ExRaiseStatus(STATUS_NOT_FOUND);

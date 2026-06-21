@@ -16,7 +16,7 @@ _IRQL_requires_max_(APC_LEVEL)
 ULONG FindPidByName(_In_ const wchar_t* processName) {
 	NTSTATUS status = STATUS_SUCCESS;
 	ULONG pid = 0;
-	PSYSTEM_PROCESS_INFO originalInfo = NULL;
+	auto infoAllocator = MemoryAllocator<PSYSTEM_PROCESS_INFO>();
 	PSYSTEM_PROCESS_INFO info = NULL;
 	ULONG infoSize = 0;
 
@@ -26,23 +26,19 @@ ULONG FindPidByName(_In_ const wchar_t* processName) {
 	status = ZwQuerySystemInformation(SystemProcessInformation, NULL, 0, &infoSize);
 
 	while (status == STATUS_INFO_LENGTH_MISMATCH) {
-		FreeVirtualMemory(originalInfo);
-		originalInfo = AllocateMemory<PSYSTEM_PROCESS_INFO>(infoSize);
-
-		if (!originalInfo)
+		if (!infoAllocator.Realloc(infoSize))
 			break;
-		status = ZwQuerySystemInformation(SystemProcessInformation, originalInfo, infoSize, &infoSize);
+		status = ZwQuerySystemInformation(SystemProcessInformation, infoAllocator.Get(), infoSize, &infoSize);
 	}
 
-	if (!NT_SUCCESS(status) || !originalInfo) {
-		if (!originalInfo)
+	if (!NT_SUCCESS(status) || !infoAllocator.IsValid()) {
+		if (!infoAllocator.Get())
 			status = STATUS_INSUFFICIENT_RESOURCES;
-		FreeVirtualMemory(originalInfo);
 		ExRaiseStatus(status);
 	}
 
 	// Using another info variable to avoid BSOD on freeing.
-	info = originalInfo;
+	info = infoAllocator.Get();
 
 	// Iterating the processes information until our pid is found.
 	while (info->NextEntryOffset) {
@@ -54,8 +50,6 @@ ULONG FindPidByName(_In_ const wchar_t* processName) {
 		}
 		info = reinterpret_cast<PSYSTEM_PROCESS_INFO>(reinterpret_cast<PUCHAR>(info) + info->NextEntryOffset);
 	}
-
-	FreeVirtualMemory(originalInfo);
 
 	if (!pid)
 		ExRaiseStatus(STATUS_NOT_FOUND);

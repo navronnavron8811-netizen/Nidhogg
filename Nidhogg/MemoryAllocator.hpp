@@ -119,11 +119,11 @@ public:
 	}
 
 	_IRQL_requires_max_(DISPATCH_LEVEL)
-	bool Alloc(_In_ SIZE_T size) {
+	bool Alloc(_In_ SIZE_T size, _In_ bool paged = true) {
 		if (size == 0 || allocatedData) {
 			return false;
 		}
-		allocatedData = AllocateMemory<DataType>(size);
+		allocatedData = AllocateMemory<DataType>(size, paged);
 
 		if (allocatedData) {
 			RtlSecureZeroMemory(allocatedData, size);
