@@ -1661,6 +1661,7 @@ PETHREAD MemoryHandler::FindAlertableThread(_In_ HANDLE pid) {
 	}
 
 	if (!NT_SUCCESS(status) || !infoAllocator.IsValid()) {
+		infoAllocator.Free();
 		ExRaiseStatus(status);
 	}
 	info = infoAllocator.Get();
@@ -1676,6 +1677,7 @@ PETHREAD MemoryHandler::FindAlertableThread(_In_ HANDLE pid) {
 	}
 
 	if (!NT_SUCCESS(status)) {
+		infoAllocator.Free();
 		ExRaiseStatus(status);
 	}
 
@@ -1710,8 +1712,10 @@ PETHREAD MemoryHandler::FindAlertableThread(_In_ HANDLE pid) {
 		break;
 	}
 
-	if (!targetThread)
+	if (!targetThread) {
+		infoAllocator.Free();
 		ExRaiseStatus(STATUS_NOT_FOUND);
+	}
 	return targetThread;
 }
 

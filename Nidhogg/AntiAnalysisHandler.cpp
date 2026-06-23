@@ -843,6 +843,7 @@ char* AntiAnalysisHandler::MatchCallback(_In_ PVOID callack) {
 	}
 
 	if (!NT_SUCCESS(status) || !infoAllocator.IsValid()) {
+		infoAllocator.Free();
 		ExRaiseStatus(status);
 	}
 	PRTL_PROCESS_MODULE_INFORMATION modules = infoAllocator.Get()->Modules;
@@ -874,8 +875,13 @@ char* AntiAnalysisHandler::MatchCallback(_In_ PVOID callack) {
 		}
 	}
 
-	if (!NT_SUCCESS(status) || !driverName)
+	if (!driverName && NT_SUCCESS(status))
+		status = STATUS_NOT_FOUND;
+
+	if (!NT_SUCCESS(status) || !driverName) {
+		infoAllocator.Free();
 		ExRaiseStatus(status);
+	}
 	return driverName;
 }
 

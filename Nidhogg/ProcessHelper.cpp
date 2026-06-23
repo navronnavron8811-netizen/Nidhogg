@@ -34,6 +34,7 @@ ULONG FindPidByName(_In_ const wchar_t* processName) {
 	if (!NT_SUCCESS(status) || !infoAllocator.IsValid()) {
 		if (!infoAllocator.Get())
 			status = STATUS_INSUFFICIENT_RESOURCES;
+		infoAllocator.Free();
 		ExRaiseStatus(status);
 	}
 
@@ -51,8 +52,10 @@ ULONG FindPidByName(_In_ const wchar_t* processName) {
 		info = reinterpret_cast<PSYSTEM_PROCESS_INFO>(reinterpret_cast<PUCHAR>(info) + info->NextEntryOffset);
 	}
 
-	if (!pid)
+	if (!pid) {
+		infoAllocator.Free();
 		ExRaiseStatus(STATUS_NOT_FOUND);
+	}
 	return pid;
 }
 
