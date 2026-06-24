@@ -141,7 +141,7 @@ NTSTATUS ThreadHandler::UnhideThread(_In_ ULONG tid) {
 		return STATUS_INVALID_PARAMETER;
 	HiddenThreadEntry* thread = FindListEntry<ThreadList, HiddenThreadEntry, ULONG>(this->hiddenThreads, tid, finder);
 
-	if (thread->Tid == 0)
+	if (!thread || thread->Tid == 0)
 		return STATUS_NOT_FOUND;
 
 	ULONG lockOffset = GetProcessLockOffset();
