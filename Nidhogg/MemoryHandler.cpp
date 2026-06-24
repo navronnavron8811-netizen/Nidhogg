@@ -78,18 +78,19 @@ NTSTATUS MemoryHandler::InjectDllAPC(_In_ IoctlDllInfo& dllInfo) {
 	PVOID loadLibraryAddress = nullptr;
 	SIZE_T dllPathSize = strlen(dllInfo.DllPath) + 1;
 	const WCHAR kernel32[] = L"\\Windows\\System32\\kernel32.dll";
-	MemoryAllocator<WCHAR*> fullPath((DRIVE_LETTER_SIZE + wcslen(kernel32)) * sizeof(WCHAR));
+	const SIZE_T fullPathLength = DRIVE_LETTER_SIZE + wcslen(kernel32) + 1;
+	MemoryAllocator<WCHAR*> fullPath(fullPathLength * sizeof(WCHAR));
 
 	if (!fullPath.IsValid())
 		return STATUS_INSUFFICIENT_RESOURCES;
 
 	__try {
 		mainDriveLetter = GetMainDriveLetter();
-		errno_t err = wcscpy_s(fullPath.Get(), DRIVE_LETTER_SIZE * sizeof(WCHAR), mainDriveLetter);
+		errno_t err = wcscpy_s(fullPath.Get(), fullPathLength, mainDriveLetter);
 
 		if (err != 0)
 			ExRaiseStatus(STATUS_INVALID_PARAMETER);
-		err = wcscat_s(fullPath.Get(), wcslen(kernel32) * sizeof(WCHAR), kernel32);
+		err = wcscat_s(fullPath.Get(), fullPathLength, kernel32);
 
 		if (err != 0)
 			ExRaiseStatus(STATUS_INVALID_PARAMETER);
@@ -159,7 +160,8 @@ NTSTATUS MemoryHandler::InjectDllThread(_In_ IoctlDllInfo& dllInfo) const {
 	if (!NT_SUCCESS(status))
 		return status;
 	const WCHAR kernel32[] = L"\\Windows\\System32\\kernel32.dll";
-	MemoryAllocator<WCHAR*> fullPath((DRIVE_LETTER_SIZE + wcslen(kernel32)) * sizeof(WCHAR));
+	const SIZE_T fullPathLength = DRIVE_LETTER_SIZE + wcslen(kernel32) + 1;
+	MemoryAllocator<WCHAR*> fullPath(fullPathLength * sizeof(WCHAR));
 
 	if (!fullPath.IsValid())
 		return STATUS_INSUFFICIENT_RESOURCES;
@@ -167,11 +169,11 @@ NTSTATUS MemoryHandler::InjectDllThread(_In_ IoctlDllInfo& dllInfo) const {
 	IrqlGuard irqlGuard(PASSIVE_LEVEL);
 	__try {
 		mainDriveLetter = GetMainDriveLetter();
-		errno_t err = wcscpy_s(fullPath.Get(), DRIVE_LETTER_SIZE * sizeof(WCHAR), mainDriveLetter);
+		errno_t err = wcscpy_s(fullPath.Get(), fullPathLength, mainDriveLetter);
 
 		if (err != 0)
 			ExRaiseStatus(STATUS_INVALID_PARAMETER);
-		err = wcscat_s(fullPath.Get(), wcslen(kernel32) * sizeof(WCHAR), kernel32);
+		err = wcscat_s(fullPath.Get(), fullPathLength, kernel32);
 
 		if (err != 0)
 			ExRaiseStatus(STATUS_INVALID_PARAMETER);
@@ -506,7 +508,7 @@ NTSTATUS MemoryHandler::HideModule(_In_ IoctlHiddenModuleInfo& moduleInformation
 		ObDereferenceObject(targetProcess);
 		return STATUS_INSUFFICIENT_RESOURCES;
 	}
-	errno_t err = wcscpy_s(entry.ModuleName, (moduleNameLen + 1) * sizeof(WCHAR), moduleInformation.ModuleName);
+	errno_t err = wcscpy_s(entry.ModuleName, moduleNameLen + 1, moduleInformation.ModuleName);
 
 	if (err != 0) {
 		FreeVirtualMemory(entry.ModuleName);
@@ -804,8 +806,14 @@ NTSTATUS MemoryHandler::HideDriver(_In_ wchar_t* driverPath) {
 
 		if (_wcsnicmp(loadedModulesEntry->FullDllName.Buffer, driverPath,
 			loadedModulesEntry->FullDllName.Length / sizeof(wchar_t) - 4) == 0) {
-			errno_t err = wcscpy_s(hiddenDriver.DriverPath, (loadedModulesEntry->FullDllName.Length + sizeof(wchar_t)) * sizeof(wchar_t), 
-				loadedModulesEntry->FullDllName.Buffer);
+			SIZE_T driverPathLength = loadedModulesEntry->FullDllName.Length / sizeof(wchar_t);
+
+			if (driverPathLength >= RTL_NUMBER_OF(hiddenDriver.DriverPath)) {
+				status = STATUS_INVALID_PARAMETER;
+				break;
+			}
+			errno_t err = wcsncpy_s(hiddenDriver.DriverPath, RTL_NUMBER_OF(hiddenDriver.DriverPath),
+				loadedModulesEntry->FullDllName.Buffer, driverPathLength);
 
 			if (err != 0) {
 				status = STATUS_UNSUCCESSFUL;
@@ -1183,7 +1191,8 @@ NTSTATUS MemoryHandler::GetLsassMetadata(_In_ ULONG lsassPid) {
 	WCHAR* mainDriveLetter = nullptr;
 	PEPROCESS lsass = nullptr;
 	const WCHAR lsasrvDll[] = L"\\Windows\\System32\\lsasrv.dll";
-	MemoryAllocator<WCHAR*> fullPath((DRIVE_LETTER_SIZE + wcslen(lsasrvDll)) * sizeof(WCHAR));
+	const SIZE_T fullPathLength = DRIVE_LETTER_SIZE + wcslen(lsasrvDll) + 1;
+	MemoryAllocator<WCHAR*> fullPath(fullPathLength * sizeof(WCHAR));
 
 	if (!fullPath.IsValid() || lsassPid <= SYSTEM_PROCESS_PID)
 		return STATUS_INSUFFICIENT_RESOURCES;
@@ -1206,11 +1215,11 @@ NTSTATUS MemoryHandler::GetLsassMetadata(_In_ ULONG lsassPid) {
 	IrqlGuard irqlGuard(PASSIVE_LEVEL);
 	__try {
 		mainDriveLetter = GetMainDriveLetter();
-		errno_t err = wcscpy_s(fullPath.Get(), DRIVE_LETTER_SIZE * sizeof(WCHAR), mainDriveLetter);
+		errno_t err = wcscpy_s(fullPath.Get(), fullPathLength, mainDriveLetter);
 
 		if (err != 0)
 			ExRaiseStatus(STATUS_INVALID_PARAMETER);
-		err = wcscat_s(fullPath.Get(), wcslen(lsasrvDll) * sizeof(WCHAR), lsasrvDll);
+		err = wcscat_s(fullPath.Get(), fullPathLength, lsasrvDll);
 
 		if (err != 0)
 			ExRaiseStatus(STATUS_INVALID_PARAMETER);
@@ -1458,7 +1467,7 @@ NTSTATUS MemoryHandler::VadRestoreObject(_Inout_ PEPROCESS process, _In_ PMMVAD_
 			return STATUS_INVALID_ADDRESS;
 
 		PFILE_OBJECT fileObject = reinterpret_cast<PFILE_OBJECT>(longNode->Subsection->ControlArea->FilePointer.Value & ~0xF);
-		errno_t err = wcscpy_s(fileObject->FileName.Buffer, fileObject->FileName.MaximumLength * sizeof(wchar_t), moduleName);
+		errno_t err = wcscpy_s(fileObject->FileName.Buffer, fileObject->FileName.MaximumLength / sizeof(wchar_t), moduleName);
 
 		if (err != 0)
 			return STATUS_UNSUCCESSFUL;
@@ -1531,7 +1540,8 @@ NTSTATUS MemoryHandler::VadHideObject(_Inout_ PEPROCESS process, _In_ ULONG_PTR 
 
 			if (!moduleEntry.VadModuleName)
 				return STATUS_INSUFFICIENT_RESOURCES;
-			errno_t err = wcscpy_s(moduleEntry.VadModuleName, fileObject->FileName.Length + sizeof(wchar_t), fileObject->FileName.Buffer);
+			errno_t err = wcsncpy_s(moduleEntry.VadModuleName, fileObject->FileName.MaximumLength / sizeof(wchar_t) + 1,
+				fileObject->FileName.Buffer, fileObject->FileName.Length / sizeof(wchar_t));
 
 			if (err != 0) {
 				FreeVirtualMemory(moduleEntry.VadModuleName);
@@ -1868,7 +1878,7 @@ bool MemoryHandler::AddHiddenDriver(_Inout_ HiddenDriverEntry& item) {
 	if (!driverEntry)
 		return false;
 	driverEntry->OriginalEntry = item.OriginalEntry;
-	errno_t err = wcscpy_s(driverEntry->DriverPath, (wcslen(item.DriverPath) + 1) * sizeof(wchar_t), item.DriverPath);
+	errno_t err = wcscpy_s(driverEntry->DriverPath, RTL_NUMBER_OF(driverEntry->DriverPath), item.DriverPath);
 
 	if (err != 0) {
 		FreeVirtualMemory(driverEntry);
