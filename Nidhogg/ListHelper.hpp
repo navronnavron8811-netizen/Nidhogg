@@ -192,8 +192,10 @@ inline void ClearList(_Inout_ List* list, _In_ CleanupFunction<ListItem> functio
 		return;
 	list->Lock.Lock();
 
-	if (list->Count == 0 || !list->Items)
+	if (list->Count == 0 || !list->Items) {
+		list->Lock.Unlock();
 		return;
+	}
 	PLIST_ENTRY current = list->Items;
 
 	while (current->Flink != list->Items) {
