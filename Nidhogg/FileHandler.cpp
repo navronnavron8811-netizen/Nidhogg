@@ -6,6 +6,7 @@ FileHandler::FileHandler() {
 	if (!InitializeList(&protectedFiles))
 		ExRaiseStatus(STATUS_INSUFFICIENT_RESOURCES);
 	memset(callbacks, 0, sizeof(callbacks));
+	rundown = RundownProtection();
 }
 
 _IRQL_requires_same_
@@ -17,7 +18,7 @@ FileHandler::~FileHandler() {
 			UninstallNtfsHook(i);
 		}
 	}
-
+	rundown.Complete();
 	ClearFilesList(FileType::All);
 	FreeVirtualMemory(this->protectedFiles.Items);
 }
@@ -27,6 +28,16 @@ PVOID FileHandler::GetNtfsCallback(_In_ ULONG index) const {
 	if (index >= SUPPORTED_HOOKED_NTFS_CALLBACKS)
 		ExRaiseStatus(STATUS_INVALID_PARAMETER);
 	return callbacks[index].Address;
+}
+
+_IRQL_requires_max_(DISPATCH_LEVEL)
+bool FileHandler::AcquireRundown() {
+	return rundown.Acquire();
+}
+
+_IRQL_requires_max_(DISPATCH_LEVEL)
+void FileHandler::ReleaseRundown() {
+	rundown.Release();
 }
 
 /*
@@ -56,10 +67,20 @@ NTSTATUS HookedNtfsIrpCreate(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP I
 
 	// If we reach here, it means something went horribly wrong.
 	__try {
+		if (!NidhoggFileHandler)
+			return STATUS_DELETE_PENDING;
 		originalFunction = static_cast<tNtfsIrpFunction>(NidhoggFileHandler->GetNtfsCallback(IRP_MJ_CREATE));
+
+		if (!NidhoggFileHandler->AcquireRundown())
+			return originalFunction ? originalFunction(DeviceObject, Irp) : STATUS_DELETE_PENDING;
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
 		return STATUS_SUCCESS;
+	}
+
+	if (!originalFunction) {
+		NidhoggFileHandler->ReleaseRundown();
+		return STATUS_DELETE_PENDING;
 	}
 
 	do {
@@ -95,13 +116,18 @@ NTSTATUS HookedNtfsIrpCreate(_Inout_ PDEVICE_OBJECT DeviceObject, _Inout_ PIRP I
 		if (NidhoggFileHandler->FindFile(fullPath.Buffer, FileType::Protected, false)) {
 			FreeVirtualMemory(fullPath.Buffer);
 			Irp->IoStatus.Status = STATUS_ACCESS_DENIED;
-			return STATUS_SUCCESS;
+			Irp->IoStatus.Information = 0;
+			IoCompleteRequest(Irp, IO_NO_INCREMENT);
+			NidhoggFileHandler->ReleaseRundown();
+			return STATUS_ACCESS_DENIED;
 		}
 	} while (false);
 	FreeVirtualMemory(fullPath.Buffer);
 
 	irqlGuard.UnsetIrql();
-	return originalFunction(DeviceObject, Irp);
+	NTSTATUS status = originalFunction(DeviceObject, Irp);
+	NidhoggFileHandler->ReleaseRundown();
+	return status;
 }
 
 /*
@@ -144,6 +170,7 @@ NTSTATUS FileHandler::InstallNtfsHook(_In_ ULONG irpMjFunction) {
 		return status;
 	}
 
+	rundown.Reinit();
 	callbacks[irpMjFunction].Address = reinterpret_cast<PVOID>(InterlockedExchange64(
 		reinterpret_cast<LONG64*>(&ntfsDriverObject->MajorFunction[irpMjFunction]),
 		functionAddress));
@@ -197,6 +224,7 @@ NTSTATUS FileHandler::UninstallNtfsHook(_In_ ULONG irpMjFunction) {
 	InterlockedExchange64(reinterpret_cast<LONG64*>(&ntfsDriverObject->MajorFunction[irpMjFunction]), functionAddress);
 	this->callbacks[irpMjFunction].Address = nullptr;
 	this->callbacks[irpMjFunction].Activated = false;
+	rundown.Complete();
 
 	ObDereferenceObject(ntfsDriverObject);
 	return status;
@@ -380,7 +408,7 @@ bool FileHandler::ListProtectedFiles(_Inout_ IoctlFileList* filesList) {
 		return true;
 	}
 	currentEntry = protectedFiles.Items;
-	MemoryGuard listGuard(filesList->Files, static_cast<ULONG>(protectedFiles.Count * sizeof(WCHAR)), UserMode);
+	MemoryGuard listGuard(filesList->Files, static_cast<ULONG>(protectedFiles.Count * sizeof(WCHAR*)), UserMode);
 
 	if (!listGuard.IsValid())
 		return false;

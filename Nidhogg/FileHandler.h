@@ -10,6 +10,7 @@ extern "C" {
 	#include "NidhoggCommon.h"
 }
 #include "FileHelper.h"
+#include "RundownProtection.h"
 #include "ListHelper.hpp"
 
 // Definitions.
@@ -42,6 +43,7 @@ class FileHandler {
 private:
 	FilesList protectedFiles;
 	NtfsCallback callbacks[SUPPORTED_HOOKED_NTFS_CALLBACKS];
+	RundownProtection rundown;
 
 public:
 	void* operator new(size_t size) noexcept {
@@ -82,6 +84,12 @@ public:
 
 	_IRQL_requires_max_(APC_LEVEL)
 	PVOID GetNtfsCallback(_In_ ULONG index) const;
+
+	_IRQL_requires_max_(DISPATCH_LEVEL)
+	bool AcquireRundown();
+
+	_IRQL_requires_max_(DISPATCH_LEVEL)
+	void ReleaseRundown();
 };
 
 inline FileHandler* NidhoggFileHandler;
