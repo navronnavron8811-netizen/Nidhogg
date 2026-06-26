@@ -406,7 +406,8 @@ PVOID GetSSDTFunctionAddress(_In_ const PSYSTEM_SERVICE_DESCRIPTOR_TABLE ssdt, _
 	errno_t err = 0;
 	WCHAR* mainDriveLetter = nullptr;
 	const WCHAR ntdllPath[] = L"\\Windows\\System32\\ntdll.dll";
-	MemoryAllocator<WCHAR*> fullPath((DRIVE_LETTER_SIZE + wcslen(ntdllPath) + 1) * sizeof(WCHAR));
+	const SIZE_T fullPathLength = DRIVE_LETTER_SIZE + wcslen(ntdllPath) + 1;
+	MemoryAllocator<WCHAR*> fullPath(fullPathLength * sizeof(WCHAR));
 
 	if (!fullPath.IsValid())
 		ExRaiseStatus(STATUS_INSUFFICIENT_RESOURCES);
@@ -426,11 +427,11 @@ PVOID GetSSDTFunctionAddress(_In_ const PSYSTEM_SERVICE_DESCRIPTOR_TABLE ssdt, _
 	IrqlGuard irqlGuard(PASSIVE_LEVEL);
 	__try {
 		mainDriveLetter = GetMainDriveLetter();
-		err = wcscpy_s(fullPath.Get(), DRIVE_LETTER_SIZE * sizeof(WCHAR), mainDriveLetter);
+		err = wcscpy_s(fullPath.Get(), fullPathLength, mainDriveLetter);
 
 		if (err != 0)
 			ExRaiseStatus(STATUS_INVALID_PARAMETER);
-		err = wcscat_s(fullPath.Get(), wcslen(ntdllPath) * sizeof(WCHAR), ntdllPath);
+		err = wcscat_s(fullPath.Get(), fullPathLength, ntdllPath);
 
 		if (err != 0)
 			ExRaiseStatus(STATUS_INVALID_PARAMETER);
