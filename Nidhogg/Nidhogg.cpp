@@ -14,7 +14,7 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
 	Features.ThreadProtection = false;
 	Features.RegistryFeatures = false;
 	Features.AutoModuleUnload = false;
-	Print(DRIVER_PREFIX "Driver is being reflectively loaded...\n");
+	NidhoggLogger.Info(DRIVER_PREFIX "Driver is being reflectively loaded...\n");
 
 	UNICODE_STRING driverName = RTL_CONSTANT_STRING(DRIVER_NAME);
 	UNICODE_STRING routineName = RTL_CONSTANT_STRING(L"IoCreateDriver");
@@ -26,7 +26,7 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
 	NTSTATUS status = IoCreateDriver(&driverName, &NidhoggEntry);
 
 	if (!NT_SUCCESS(status))
-		Print(DRIVER_PREFIX "Failed to create driver: (0x%08X)\n", status);
+		NidhoggLogger.Error(DRIVER_PREFIX "Failed to create driver: (0x%08X)\n", status);
 	return status;
 #endif
 
@@ -67,7 +67,7 @@ NTSTATUS NidhoggEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 	status = IoCreateDevice(DriverObject, 0, &deviceName, FILE_DEVICE_UNKNOWN, FILE_DEVICE_SECURE_OPEN, FALSE, &DeviceObject);
 
 	if (!NT_SUCCESS(status)) {
-		Print(DRIVER_PREFIX "Failed to create device: (0x%08X)\n", status);
+		NidhoggLogger.Error(DRIVER_PREFIX "Failed to create device: (0x%08X)\n", status);
 		ClearAll();
 		return status;
 	}
@@ -75,7 +75,7 @@ NTSTATUS NidhoggEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 	status = IoCreateSymbolicLink(&symbolicLink, &deviceName);
 
 	if (!NT_SUCCESS(status)) {
-		Print(DRIVER_PREFIX "Failed to create symbolic link: (0x%08X)\n", status);
+		NidhoggLogger.Error(DRIVER_PREFIX "Failed to create symbolic link: (0x%08X)\n", status);
 		IoDeleteDevice(DeviceObject);
 		ClearAll();
 		return status;
@@ -106,7 +106,7 @@ NTSTATUS NidhoggEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 		status = ObRegisterCallbacks(&registrationCallbacks, &RegistrationHandle);
 
 		if (!NT_SUCCESS(status)) {
-			Print(DRIVER_PREFIX "Failed to register process callback: (0x%08X)\n", status);
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to register process callback: (0x%08X)\n", status);
 			status = STATUS_SUCCESS;
 			Features.ProcessProtection = false;
 			Features.ThreadProtection = false;
@@ -115,7 +115,7 @@ NTSTATUS NidhoggEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 		status = CmRegisterCallbackEx(OnRegistryNotify, &regAltitude, DriverObject, nullptr, &NidhoggRegistryHandler->regCookie, nullptr);
 
 		if (!NT_SUCCESS(status)) {
-			Print(DRIVER_PREFIX "Failed to register registry callback: (0x%08X)\n", status);
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to register registry callback: (0x%08X)\n", status);
 			status = STATUS_SUCCESS;
 			Features.RegistryFeatures = false;
 		}
@@ -123,7 +123,7 @@ NTSTATUS NidhoggEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 		status = PsSetCreateProcessNotifyRoutine(OnProcessCreationExit, FALSE);
 
 		if (!NT_SUCCESS(status)) {
-			Print(DRIVER_PREFIX "Failed to register process creation callback: (0x%08X)\n", status);
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to register process creation callback: (0x%08X)\n", status);
 			status = STATUS_SUCCESS;
 			Features.AutoModuleUnload = false;
 		}
@@ -138,7 +138,7 @@ NTSTATUS NidhoggEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 	DriverObject->MajorFunction[IRP_MJ_CREATE] = DriverObject->MajorFunction[IRP_MJ_CLOSE] = NidhoggCreateClose;
 	DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = NidhoggDeviceControl;
 
-	Print(DRIVER_PREFIX "Initialization finished.\n");
+	NidhoggLogger.Info(DRIVER_PREFIX "Initialization finished.\n");
 	return status;
 }
 
@@ -156,13 +156,13 @@ _Function_class_(DRIVER_UNLOAD)
 _IRQL_requires_(PASSIVE_LEVEL)
 _IRQL_requires_same_
 void NidhoggUnload(PDRIVER_OBJECT DriverObject) {
-	Print(DRIVER_PREFIX "Unloading...\n");
+	NidhoggLogger.Info(DRIVER_PREFIX "Unloading...\n");
 
 	if (Features.RegistryFeatures && NidhoggRegistryHandler->regCookie.QuadPart != 0) {
 		NTSTATUS status = CmUnRegisterCallback(NidhoggRegistryHandler->regCookie);
 
 		if (!NT_SUCCESS(status)) {
-			Print(DRIVER_PREFIX "Failed to unregister registry callbacks: (0x%08X)\n", status);
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to unregister registry callbacks: (0x%08X)\n", status);
 		}
 	}
 
@@ -170,7 +170,7 @@ void NidhoggUnload(PDRIVER_OBJECT DriverObject) {
 		NTSTATUS status = PsSetCreateProcessNotifyRoutine(OnProcessCreationExit, TRUE);
 
 		if (!NT_SUCCESS(status)) {
-			Print(DRIVER_PREFIX "Failed to unregister process creation callback: (0x%08X)\n", status);
+			NidhoggLogger.Error(DRIVER_PREFIX "Failed to unregister process creation callback: (0x%08X)\n", status);
 		}
 	}
 
@@ -199,48 +199,48 @@ _IRQL_requires_same_
 _IRQL_requires_(PASSIVE_LEVEL)
 void ClearAll() {
 	if (NidhoggNetworkHandler) {
-		Print(DRIVER_PREFIX "Deleting NetworkHandler...\n");
+		NidhoggLogger.Debug(DRIVER_PREFIX "Deleting NetworkHandler...\n");
 		delete NidhoggNetworkHandler;
 		NidhoggNetworkHandler = nullptr;
 	}
 	
 	if (NidhoggRegistryHandler) {
-		Print(DRIVER_PREFIX "Deleting RegistryHandler...\n");
+		NidhoggLogger.Debug(DRIVER_PREFIX "Deleting RegistryHandler...\n");
 		delete NidhoggRegistryHandler;
 		NidhoggRegistryHandler = nullptr;
 	}
 	
 	if (NidhoggAntiAnalysisHandler) {
-		Print(DRIVER_PREFIX "Deleting AntiAnalysisHandler...\n");
+		NidhoggLogger.Debug(DRIVER_PREFIX "Deleting AntiAnalysisHandler...\n");
 		delete NidhoggAntiAnalysisHandler;
 		NidhoggAntiAnalysisHandler = nullptr;
 	}
 	
 	if (NidhoggMemoryHandler) {
-		Print(DRIVER_PREFIX "Deleting MemoryHandler...\n");
+		NidhoggLogger.Debug(DRIVER_PREFIX "Deleting MemoryHandler...\n");
 		delete NidhoggMemoryHandler;
 		NidhoggMemoryHandler = nullptr;
 	}
 	
 	if (NidhoggFileHandler) {
-		Print(DRIVER_PREFIX "Deleting FileHandler...\n");
+		NidhoggLogger.Debug(DRIVER_PREFIX "Deleting FileHandler...\n");
 		delete NidhoggFileHandler;
 		NidhoggFileHandler = nullptr;
 	}
 	
 	if (NidhoggThreadHandler) {
-		Print(DRIVER_PREFIX "Deleting ThreadHandler...\n");
+		NidhoggLogger.Debug(DRIVER_PREFIX "Deleting ThreadHandler...\n");
 		delete NidhoggThreadHandler;
 		NidhoggThreadHandler = nullptr;
 	}
 	
 	if (NidhoggProcessHandler) {
-		Print(DRIVER_PREFIX "Deleting ProcessHandler...\n");
+		NidhoggLogger.Debug(DRIVER_PREFIX "Deleting ProcessHandler...\n");
 		delete NidhoggProcessHandler;
 		NidhoggProcessHandler = nullptr;
 	}
 	
-	Print(DRIVER_PREFIX "All handlers cleared successfully\n");
+	NidhoggLogger.Info(DRIVER_PREFIX "All handlers cleared successfully\n");
 }
 
 /*
@@ -276,7 +276,7 @@ bool InitializeFeatures() {
 		return false;
 
 	UNICODE_STRING routineName = RTL_CONSTANT_STRING(L"ExAllocatePool2");
-	AllocatePool2 = MmGetSystemRoutineAddress(&routineName);
+	AllocatePool2 = reinterpret_cast<decltype(ExAllocatePool2)*>(MmGetSystemRoutineAddress(&routineName));
 
 	// Initialize utils.
 	__try {

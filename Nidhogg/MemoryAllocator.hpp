@@ -53,7 +53,7 @@ inline Pointer AllocateMemory(size_t size,
 	if (AllocatePool2 && WindowsBuildNumber >= WIN_2004 && !forceDeprecatedAlloc) {
 		POOL_FLAGS flags = paged ? POOL_FLAG_PAGED : POOL_FLAG_NON_PAGED;
 		flags = execute ? POOL_FLAG_NON_PAGED_EXECUTE : flags;
-		allocatedMem = ((tExAllocatePool2)AllocatePool2)(flags, size, DRIVER_TAG);
+		allocatedMem = AllocatePool2(flags, size, DRIVER_TAG);
 	}
 	else {
 		POOL_TYPE flags = paged ? PagedPool : NonPagedPool;
@@ -119,11 +119,11 @@ public:
 	}
 
 	_IRQL_requires_max_(DISPATCH_LEVEL)
-	bool Alloc(_In_ SIZE_T size) {
+	bool Alloc(_In_ SIZE_T size, _In_ bool paged = true) {
 		if (size == 0 || allocatedData) {
 			return false;
 		}
-		allocatedData = AllocateMemory<DataType>(size);
+		allocatedData = AllocateMemory<DataType>(size, paged);
 
 		if (allocatedData) {
 			RtlSecureZeroMemory(allocatedData, size);

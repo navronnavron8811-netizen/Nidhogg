@@ -445,7 +445,7 @@ NTSTATUS RegistryHandler::RegNtPostEnumerateKeyHandler(_Inout_ REG_POST_OPERATIO
 					RtlCopyMemory(preInfo->KeyInformation, tempKeyInfo.Get(), resultLength);
 				}
 				__except (EXCEPTION_EXECUTE_HANDLER) {
-					Print(DRIVER_PREFIX "Failed to copy the next key item, 0x%x\n", GetExceptionCode());
+					NidhoggLogger.Error(DRIVER_PREFIX "Failed to copy the next key item, 0x%x\n", GetExceptionCode());
 				}
 			}
 			counter++;
@@ -564,7 +564,7 @@ NTSTATUS RegistryHandler::RegNtPostEnumerateValueKeyHandler(_Inout_ REG_POST_OPE
 					RtlCopyMemory(preInfo->KeyValueInformation, tempValueInfo.Get(), resultLength);
 				}
 				__except (EXCEPTION_EXECUTE_HANDLER) {
-					Print(DRIVER_PREFIX "Failed to copy the next value item, 0x%x\n", GetExceptionCode());
+					NidhoggLogger.Error(DRIVER_PREFIX "Failed to copy the next value item, 0x%x\n", GetExceptionCode());
 				}
 			}
 			counter++;
@@ -954,7 +954,7 @@ bool RegistryHandler::ListRegistryItems(_Inout_ IoctlRegistryList* list) {
 		if (item) {
 			list->Items[count].Type = item->Type;
 
-			if (!regGuard.GuardMemory(list->Items[count].KeyPath, REG_KEY_LEN, UserMode))
+			if (!regGuard.GuardMemory(list->Items[count].KeyPath, REG_KEY_LEN * sizeof(WCHAR), UserMode))
 				return false;
 			err = wcscpy_s(list->Items[count].KeyPath, REG_KEY_LEN, item->KeyPath);
 			regGuard.UnguardMemory();
@@ -963,7 +963,7 @@ bool RegistryHandler::ListRegistryItems(_Inout_ IoctlRegistryList* list) {
 				return false;
 
 			if (list->Type == RegItemType::ProtectedValue || list->Type == RegItemType::HiddenValue) {
-				if (!regGuard.GuardMemory(list->Items[count].ValueName, REG_VALUE_LEN, UserMode))
+				if (!regGuard.GuardMemory(list->Items[count].ValueName, REG_VALUE_LEN * sizeof(WCHAR), UserMode))
 					return false;
 				err = wcscpy_s(list->Items[count].ValueName, REG_VALUE_LEN, item->ValueName);
 				regGuard.UnguardMemory();

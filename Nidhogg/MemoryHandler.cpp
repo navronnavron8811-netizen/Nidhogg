@@ -78,18 +78,19 @@ NTSTATUS MemoryHandler::InjectDllAPC(_In_ IoctlDllInfo& dllInfo) {
 	PVOID loadLibraryAddress = nullptr;
 	SIZE_T dllPathSize = strlen(dllInfo.DllPath) + 1;
 	const WCHAR kernel32[] = L"\\Windows\\System32\\kernel32.dll";
-	MemoryAllocator<WCHAR*> fullPath((DRIVE_LETTER_SIZE + wcslen(kernel32)) * sizeof(WCHAR));
+	const SIZE_T fullPathLength = DRIVE_LETTER_SIZE + wcslen(kernel32) + 1;
+	MemoryAllocator<WCHAR*> fullPath(fullPathLength * sizeof(WCHAR));
 
 	if (!fullPath.IsValid())
 		return STATUS_INSUFFICIENT_RESOURCES;
 
 	__try {
 		mainDriveLetter = GetMainDriveLetter();
-		errno_t err = wcscpy_s(fullPath.Get(), DRIVE_LETTER_SIZE * sizeof(WCHAR), mainDriveLetter);
+		errno_t err = wcscpy_s(fullPath.Get(), fullPathLength, mainDriveLetter);
 
 		if (err != 0)
 			ExRaiseStatus(STATUS_INVALID_PARAMETER);
-		err = wcscat_s(fullPath.Get(), wcslen(kernel32) * sizeof(WCHAR), kernel32);
+		err = wcscat_s(fullPath.Get(), fullPathLength, kernel32);
 
 		if (err != 0)
 			ExRaiseStatus(STATUS_INVALID_PARAMETER);
@@ -159,7 +160,8 @@ NTSTATUS MemoryHandler::InjectDllThread(_In_ IoctlDllInfo& dllInfo) const {
 	if (!NT_SUCCESS(status))
 		return status;
 	const WCHAR kernel32[] = L"\\Windows\\System32\\kernel32.dll";
-	MemoryAllocator<WCHAR*> fullPath((DRIVE_LETTER_SIZE + wcslen(kernel32)) * sizeof(WCHAR));
+	const SIZE_T fullPathLength = DRIVE_LETTER_SIZE + wcslen(kernel32) + 1;
+	MemoryAllocator<WCHAR*> fullPath(fullPathLength * sizeof(WCHAR));
 
 	if (!fullPath.IsValid())
 		return STATUS_INSUFFICIENT_RESOURCES;
@@ -167,11 +169,11 @@ NTSTATUS MemoryHandler::InjectDllThread(_In_ IoctlDllInfo& dllInfo) const {
 	IrqlGuard irqlGuard(PASSIVE_LEVEL);
 	__try {
 		mainDriveLetter = GetMainDriveLetter();
-		errno_t err = wcscpy_s(fullPath.Get(), DRIVE_LETTER_SIZE * sizeof(WCHAR), mainDriveLetter);
+		errno_t err = wcscpy_s(fullPath.Get(), fullPathLength, mainDriveLetter);
 
 		if (err != 0)
 			ExRaiseStatus(STATUS_INVALID_PARAMETER);
-		err = wcscat_s(fullPath.Get(), wcslen(kernel32) * sizeof(WCHAR), kernel32);
+		err = wcscat_s(fullPath.Get(), fullPathLength, kernel32);
 
 		if (err != 0)
 			ExRaiseStatus(STATUS_INVALID_PARAMETER);
@@ -506,7 +508,7 @@ NTSTATUS MemoryHandler::HideModule(_In_ IoctlHiddenModuleInfo& moduleInformation
 		ObDereferenceObject(targetProcess);
 		return STATUS_INSUFFICIENT_RESOURCES;
 	}
-	errno_t err = wcscpy_s(entry.ModuleName, (moduleNameLen + 1) * sizeof(WCHAR), moduleInformation.ModuleName);
+	errno_t err = wcscpy_s(entry.ModuleName, moduleNameLen + 1, moduleInformation.ModuleName);
 
 	if (err != 0) {
 		FreeVirtualMemory(entry.ModuleName);
@@ -702,22 +704,18 @@ NTSTATUS MemoryHandler::RestorePebModule(_In_ PEPROCESS& process, _In_ HiddenMod
 	NTSTATUS status = STATUS_UNSUCCESSFUL;
 	time.QuadPart = ONE_SECOND;
 
-	constexpr auto RestoreEntry = [](PLDR_DATA_TABLE_ENTRY pebEntry, HiddenModuleEntry* entry) -> bool {
-		if ((!IsValidListEntry(&pebEntry->InLoadOrderLinks) && IsValidListEntry(&entry->Links.InLoadOrderLinks)) || 
-			(!IsValidListEntry(&pebEntry->InInitializationOrderLinks) && IsValidListEntry(&entry->Links.InInitializationOrderLinks)) ||
-			(!IsValidListEntry(&pebEntry->InMemoryOrderLinks) && IsValidListEntry(&entry->Links.InMemoryOrderLinks)) ||
-			(!IsValidListEntry(&pebEntry->HashLinks) && IsValidListEntry(&entry->Links.HashLinks))) {
-			return false;
-		}
+	constexpr auto RestoreSavedLinks = [](PLIST_ENTRY entry, const LIST_ENTRY& savedLinks) -> bool {
 		__try {
-			if (IsValidListEntry(&entry->Links.InLoadOrderLinks))
-				InsertHeadList(&pebEntry->InLoadOrderLinks, &entry->Links.InLoadOrderLinks);
-			if (IsValidListEntry(&entry->Links.InInitializationOrderLinks))
-				InsertHeadList(&pebEntry->InInitializationOrderLinks, &entry->Links.InInitializationOrderLinks);
-			if (IsValidListEntry(&entry->Links.InMemoryOrderLinks))
-				InsertHeadList(&pebEntry->InMemoryOrderLinks, &entry->Links.InMemoryOrderLinks);
-			if (IsValidListEntry(&entry->Links.HashLinks))
-				InsertHeadList(&pebEntry->HashLinks, &entry->Links.HashLinks);
+			if (!entry || !savedLinks.Blink || !savedLinks.Flink ||
+				savedLinks.Blink->Flink != savedLinks.Flink ||
+				savedLinks.Flink->Blink != savedLinks.Blink) {
+				return false;
+			}
+
+			entry->Blink = savedLinks.Blink;
+			entry->Flink = savedLinks.Flink;
+			savedLinks.Blink->Flink = entry;
+			savedLinks.Flink->Blink = entry;
 		}
 		__except (EXCEPTION_EXECUTE_HANDLER) {
 			return false;
@@ -751,44 +749,27 @@ NTSTATUS MemoryHandler::RestorePebModule(_In_ PEPROCESS& process, _In_ HiddenMod
 			break;
 		}
 
-		// First validate that moduleEntry->OriginalEntry is valid before accessing its members
-		if (!moduleEntry->OriginalEntry || !IsValidListEntry(moduleEntry->OriginalEntry)) {
+		if (!moduleEntry->OriginalEntry) {
 			status = STATUS_INVALID_PARAMETER;
 			break;
 		}
 
-		if (moduleEntry->OriginalEntry->Blink && IsValidListEntry(moduleEntry->OriginalEntry->Blink)) {
-			pebEntry = CONTAINING_RECORD(moduleEntry->OriginalEntry->Blink, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+		pebEntry = CONTAINING_RECORD(moduleEntry->OriginalEntry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
 
-			if (RestoreEntry(pebEntry, moduleEntry)) {
-				status = STATUS_SUCCESS;
-				break;
-			}
-		}
-			
-		if (moduleEntry->OriginalEntry->Flink && IsValidListEntry(moduleEntry->OriginalEntry->Flink)) {
-			pebEntry = CONTAINING_RECORD(moduleEntry->OriginalEntry->Flink, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+		if (!RestoreSavedLinks(&pebEntry->InLoadOrderLinks, moduleEntry->Links.InLoadOrderLinks))
+			InsertTailList(&targetPeb->LoaderData->InLoadOrderModuleList, &pebEntry->InLoadOrderLinks);
 
-			if (RestoreEntry(pebEntry, moduleEntry)) {
-				status = STATUS_SUCCESS;
-				break;
-			}
+		if (!RestoreSavedLinks(&pebEntry->InMemoryOrderLinks, moduleEntry->Links.InMemoryOrderLinks))
+			InsertTailList(&targetPeb->LoaderData->InMemoryOrderModuleList, &pebEntry->InMemoryOrderLinks);
+
+		if (!RestoreSavedLinks(&pebEntry->InInitializationOrderLinks, moduleEntry->Links.InInitializationOrderLinks))
+			InsertTailList(&targetPeb->LoaderData->InInitializationOrderModuleList, &pebEntry->InInitializationOrderLinks);
+
+		if (!RestoreSavedLinks(&pebEntry->HashLinks, moduleEntry->Links.HashLinks)) {
+			InitializeListHead(&pebEntry->HashLinks);
 		}
 
-		// Fallback: iterate through the entire list
-		for (PLIST_ENTRY pListEntry = targetPeb->LoaderData->InLoadOrderModuleList.Flink;
-			pListEntry != &targetPeb->LoaderData->InLoadOrderModuleList;
-			pListEntry = pListEntry->Flink) {
-
-			pebEntry = CONTAINING_RECORD(pListEntry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
-
-			if (pebEntry && IsValidListEntry(&pebEntry->InLoadOrderLinks)) {
-				if (RestoreEntry(pebEntry, moduleEntry)) {
-					status = STATUS_SUCCESS;
-					break;
-				}
-			}
-		}
+		status = STATUS_SUCCESS;
 	} while (false);
 	
 	KeUnstackDetachProcess(&state);
@@ -825,8 +806,14 @@ NTSTATUS MemoryHandler::HideDriver(_In_ wchar_t* driverPath) {
 
 		if (_wcsnicmp(loadedModulesEntry->FullDllName.Buffer, driverPath,
 			loadedModulesEntry->FullDllName.Length / sizeof(wchar_t) - 4) == 0) {
-			errno_t err = wcscpy_s(hiddenDriver.DriverPath, (loadedModulesEntry->FullDllName.Length + sizeof(wchar_t)) * sizeof(wchar_t), 
-				loadedModulesEntry->FullDllName.Buffer);
+			SIZE_T driverPathLength = loadedModulesEntry->FullDllName.Length / sizeof(wchar_t);
+
+			if (driverPathLength >= RTL_NUMBER_OF(hiddenDriver.DriverPath)) {
+				status = STATUS_INVALID_PARAMETER;
+				break;
+			}
+			errno_t err = wcsncpy_s(hiddenDriver.DriverPath, RTL_NUMBER_OF(hiddenDriver.DriverPath),
+				loadedModulesEntry->FullDllName.Buffer, driverPathLength);
 
 			if (err != 0) {
 				status = STATUS_UNSUCCESSFUL;
@@ -1204,7 +1191,8 @@ NTSTATUS MemoryHandler::GetLsassMetadata(_In_ ULONG lsassPid) {
 	WCHAR* mainDriveLetter = nullptr;
 	PEPROCESS lsass = nullptr;
 	const WCHAR lsasrvDll[] = L"\\Windows\\System32\\lsasrv.dll";
-	MemoryAllocator<WCHAR*> fullPath((DRIVE_LETTER_SIZE + wcslen(lsasrvDll)) * sizeof(WCHAR));
+	const SIZE_T fullPathLength = DRIVE_LETTER_SIZE + wcslen(lsasrvDll) + 1;
+	MemoryAllocator<WCHAR*> fullPath(fullPathLength * sizeof(WCHAR));
 
 	if (!fullPath.IsValid() || lsassPid <= SYSTEM_PROCESS_PID)
 		return STATUS_INSUFFICIENT_RESOURCES;
@@ -1227,11 +1215,11 @@ NTSTATUS MemoryHandler::GetLsassMetadata(_In_ ULONG lsassPid) {
 	IrqlGuard irqlGuard(PASSIVE_LEVEL);
 	__try {
 		mainDriveLetter = GetMainDriveLetter();
-		errno_t err = wcscpy_s(fullPath.Get(), DRIVE_LETTER_SIZE * sizeof(WCHAR), mainDriveLetter);
+		errno_t err = wcscpy_s(fullPath.Get(), fullPathLength, mainDriveLetter);
 
 		if (err != 0)
 			ExRaiseStatus(STATUS_INVALID_PARAMETER);
-		err = wcscat_s(fullPath.Get(), wcslen(lsasrvDll) * sizeof(WCHAR), lsasrvDll);
+		err = wcscat_s(fullPath.Get(), fullPathLength, lsasrvDll);
 
 		if (err != 0)
 			ExRaiseStatus(STATUS_INVALID_PARAMETER);
@@ -1479,7 +1467,7 @@ NTSTATUS MemoryHandler::VadRestoreObject(_Inout_ PEPROCESS process, _In_ PMMVAD_
 			return STATUS_INVALID_ADDRESS;
 
 		PFILE_OBJECT fileObject = reinterpret_cast<PFILE_OBJECT>(longNode->Subsection->ControlArea->FilePointer.Value & ~0xF);
-		errno_t err = wcscpy_s(fileObject->FileName.Buffer, fileObject->FileName.MaximumLength * sizeof(wchar_t), moduleName);
+		errno_t err = wcscpy_s(fileObject->FileName.Buffer, fileObject->FileName.MaximumLength / sizeof(wchar_t), moduleName);
 
 		if (err != 0)
 			return STATUS_UNSUCCESSFUL;
@@ -1552,7 +1540,8 @@ NTSTATUS MemoryHandler::VadHideObject(_Inout_ PEPROCESS process, _In_ ULONG_PTR 
 
 			if (!moduleEntry.VadModuleName)
 				return STATUS_INSUFFICIENT_RESOURCES;
-			errno_t err = wcscpy_s(moduleEntry.VadModuleName, fileObject->FileName.Length + sizeof(wchar_t), fileObject->FileName.Buffer);
+			errno_t err = wcsncpy_s(moduleEntry.VadModuleName, fileObject->FileName.MaximumLength / sizeof(wchar_t) + 1,
+				fileObject->FileName.Buffer, fileObject->FileName.Length / sizeof(wchar_t));
 
 			if (err != 0) {
 				FreeVirtualMemory(moduleEntry.VadModuleName);
@@ -1667,28 +1656,25 @@ PETHREAD MemoryHandler::FindAlertableThread(_In_ HANDLE pid) {
 	ULONG guiThread = 0;
 	PETHREAD targetThread = NULL;
 	PSYSTEM_PROCESS_INFO info = NULL;
-	PSYSTEM_PROCESS_INFO originalInfo = NULL;
 	ULONG infoSize = 0;
+	auto infoAllocator = MemoryAllocator<PSYSTEM_PROCESS_INFO>();
 
 	NTSTATUS status = ZwQuerySystemInformation(SystemProcessInformation, NULL, 0, &infoSize);
 
 	while (status == STATUS_INFO_LENGTH_MISMATCH) {
-		FreeVirtualMemory(info);
-		info = AllocateMemory<PSYSTEM_PROCESS_INFO>(infoSize);
-
-		if (!info) {
+		if (!infoAllocator.Realloc(infoSize)) {
 			status = STATUS_INSUFFICIENT_RESOURCES;
 			break;
 		}
 
-		status = ZwQuerySystemInformation(SystemProcessInformation, info, infoSize, &infoSize);
+		status = ZwQuerySystemInformation(SystemProcessInformation, infoAllocator.Get(), infoSize, &infoSize);
 	}
 
-	if (!NT_SUCCESS(status) || !info) {
-		FreeVirtualMemory(info);
+	if (!NT_SUCCESS(status) || !infoAllocator.IsValid()) {
+		infoAllocator.Free();
 		ExRaiseStatus(status);
 	}
-	originalInfo = info;
+	info = infoAllocator.Get();
 	status = STATUS_NOT_FOUND;
 
 	// Iterating the processes information until our pid is found.
@@ -1701,7 +1687,7 @@ PETHREAD MemoryHandler::FindAlertableThread(_In_ HANDLE pid) {
 	}
 
 	if (!NT_SUCCESS(status)) {
-		FreeVirtualMemory(originalInfo);
+		infoAllocator.Free();
 		ExRaiseStatus(status);
 	}
 
@@ -1735,10 +1721,11 @@ PETHREAD MemoryHandler::FindAlertableThread(_In_ HANDLE pid) {
 		}
 		break;
 	}
-	FreeVirtualMemory(originalInfo);
 
-	if (!targetThread)
+	if (!targetThread) {
+		infoAllocator.Free();
 		ExRaiseStatus(STATUS_NOT_FOUND);
+	}
 	return targetThread;
 }
 
@@ -1891,7 +1878,7 @@ bool MemoryHandler::AddHiddenDriver(_Inout_ HiddenDriverEntry& item) {
 	if (!driverEntry)
 		return false;
 	driverEntry->OriginalEntry = item.OriginalEntry;
-	errno_t err = wcscpy_s(driverEntry->DriverPath, (wcslen(item.DriverPath) + 1) * sizeof(wchar_t), item.DriverPath);
+	errno_t err = wcscpy_s(driverEntry->DriverPath, RTL_NUMBER_OF(driverEntry->DriverPath), item.DriverPath);
 
 	if (err != 0) {
 		FreeVirtualMemory(driverEntry);

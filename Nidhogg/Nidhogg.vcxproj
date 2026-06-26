@@ -218,6 +218,7 @@
     <ClInclude Include="IrpHandlers.h" />
     <ClInclude Include="IrqlGuard.h" />
     <ClInclude Include="ListHelper.hpp" />
+    <ClInclude Include="Logger.h" />
     <ClInclude Include="MemoryAllocator.hpp" />
     <ClInclude Include="AntiAnalysisHandler.h" />
     <ClInclude Include="AutoLock.h" />
@@ -242,6 +243,7 @@
     <ClCompile Include="FileHelper.cpp" />
     <ClCompile Include="FileHandler.cpp" />
     <ClCompile Include="IrpHandlers.cpp" />
+    <ClCompile Include="Logger.cpp" />
     <ClCompile Include="MemoryHelper.cpp" />
     <ClCompile Include="MemoryHandler.cpp" />
     <ClCompile Include="NetworkHandler.cpp" />

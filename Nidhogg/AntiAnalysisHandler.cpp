@@ -827,31 +827,28 @@ NTSTATUS AntiAnalysisHandler::ListObCallbacks(_Inout_ IoctlCallbackList<ObCallba
 _IRQL_requires_max_(APC_LEVEL)
 char* AntiAnalysisHandler::MatchCallback(_In_ PVOID callack) {
 	NTSTATUS status = STATUS_SUCCESS;
-	PRTL_PROCESS_MODULES info = NULL;
 	ULONG infoSize;
 	char* driverName = nullptr;
 	errno_t err = 0;
+	MemoryAllocator<PRTL_PROCESS_MODULES> infoAllocator = MemoryAllocator<PRTL_PROCESS_MODULES>();
 
 	status = ZwQuerySystemInformation(SystemModuleInformation, NULL, 0, &infoSize);
 
 	while (status == STATUS_INFO_LENGTH_MISMATCH) {
-		FreeVirtualMemory(info);
-		info = AllocateMemory<PRTL_PROCESS_MODULES>(infoSize);
-
-		if (!info) {
+		if (!infoAllocator.Realloc(infoSize)) {
 			status = STATUS_INSUFFICIENT_RESOURCES;
 			break;
 		}
-		status = ZwQuerySystemInformation(SystemModuleInformation, info, infoSize, &infoSize);
+		status = ZwQuerySystemInformation(SystemModuleInformation, infoAllocator.Get(), infoSize, &infoSize);
 	}
 
-	if (!NT_SUCCESS(status) || !info) {
-		FreeVirtualMemory(info);
+	if (!NT_SUCCESS(status) || !infoAllocator.IsValid()) {
+		infoAllocator.Free();
 		ExRaiseStatus(status);
 	}
-	PRTL_PROCESS_MODULE_INFORMATION modules = info->Modules;
+	PRTL_PROCESS_MODULE_INFORMATION modules = infoAllocator.Get()->Modules;
 
-	for (ULONG i = 0; i < info->NumberOfModules; i++) {
+	for (ULONG i = 0; i < infoAllocator.Get()->NumberOfModules; i++) {
 		if (callack >= modules[i].ImageBase &&
 			callack < static_cast<PVOID>(static_cast<PUCHAR>(modules[i].ImageBase) + modules[i].ImageSize)) {
 			if (modules[i].FullPathName) {
@@ -877,10 +874,14 @@ char* AntiAnalysisHandler::MatchCallback(_In_ PVOID callack) {
 			break;
 		}
 	}
-	FreeVirtualMemory(info);
 
-	if (!NT_SUCCESS(status) || !driverName)
+	if (!driverName && NT_SUCCESS(status))
+		status = STATUS_NOT_FOUND;
+
+	if (!NT_SUCCESS(status) || !driverName) {
+		infoAllocator.Free();
 		ExRaiseStatus(status);
+	}
 	return driverName;
 }
 
