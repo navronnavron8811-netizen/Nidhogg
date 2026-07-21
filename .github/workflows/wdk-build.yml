@@ -13,6 +13,7 @@ jobs:
   build:
     name: Build Release x64
     runs-on: windows-2022
+    timeout-minutes: 60   # жёсткий лимит на весь job, чтобы не висел часами
 
     steps:
       - name: Checkout
@@ -25,10 +26,24 @@ jobs:
 
       - name: Install Windows Driver Kit
         shell: pwsh
-        run: choco install windowsdriverkit10 --yes --no-progress
+        timeout-minutes: 25   # даём установке WDK разумный лимит времени
+        run: |
+          choco install windowsdriverkit10 --yes --no-progress --timeout 1200
+        continue-on-error: false
+
+      - name: Verify WDK installation
+        shell: pwsh
+        run: |
+          $wdkPath = "C:\Program Files (x86)\Windows Kits\10"
+          if (-not (Test-Path $wdkPath)) {
+            Write-Error "WDK не установлен по ожидаемому пути: $wdkPath"
+            exit 1
+          }
+          Write-Host "WDK найден: $wdkPath"
 
       - name: Build solution
         shell: pwsh
+        timeout-minutes: 20
         run: msbuild Nidhogg.sln /t:Build /m /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off /p:DeployOnBuild=false
 
       - name: Upload build artifacts
